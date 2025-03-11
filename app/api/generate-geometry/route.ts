@@ -29,6 +29,7 @@ export async function POST(request: Request) {
 2. 문제에서 명시적으로 언급된 선분들을 식별합니다.
 3. 도형의 특성(평행, 수직, 길이 비율 등)을 분석합니다.
 4. 모든 기하학적 조건을 만족하는 좌표를 계산합니다.
+5. 원이 언급된 경우, 중심점과 반지름을 식별합니다.
 
 직각삼각형 처리 방법:
 1. 직각이 있는 꼭지점을 기준점으로 설정합니다.
@@ -48,6 +49,13 @@ export async function POST(request: Request) {
       "end": string,        // 끝점 라벨
       "length": number,     // 선분의 길이 (선택적)
       "showLength": boolean // 길이를 표시할지 여부, 기본값 false
+    }
+  ],
+  "circles": [
+    {
+      "center": string,     // 중심점 라벨
+      "radius": number,     // 반지름 길이
+      "showRadius": boolean // 반지름을 표시할지 여부, 기본값 false
     }
   ]
 }
@@ -85,7 +93,7 @@ ${text}
       const normalizedContent = cleanContent.replace(/(-?\d+)\/(\d+)/g, (_, num, den) => (Number(num) / Number(den)).toString());
       const geometryData = JSON.parse(normalizedContent);
       
-      if (!geometryData.points || !geometryData.lines) {
+      if (!geometryData.points || !geometryData.lines || !geometryData.circles) {
         throw new Error('잘못된 도형 데이터 형식입니다.');
       }
       return NextResponse.json(geometryData);

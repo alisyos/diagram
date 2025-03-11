@@ -14,9 +14,16 @@ interface Line {
   showLength?: boolean;
 }
 
+interface Circle {
+  center: string;
+  radius: number;
+  showRadius?: boolean;
+}
+
 interface GeometryData {
   points: Point[];
   lines: Line[];
+  circles: Circle[];
 }
 
 interface Props {
@@ -36,11 +43,26 @@ const GeometryRenderer = ({ data }: Props) => {
     const height = 400;
     const padding = 50;
 
-    // 도형의 경계 계산
-    const xMin = Math.min(...data.points.map(p => p.x));
-    const xMax = Math.max(...data.points.map(p => p.x));
-    const yMin = Math.min(...data.points.map(p => p.y));
-    const yMax = Math.max(...data.points.map(p => p.y));
+    // 도형의 경계 계산 (원의 반지름도 고려)
+    const points = data.points;
+    const circles = data.circles || [];
+    
+    const xMin = Math.min(...points.map(p => p.x), ...circles.map(c => {
+      const center = points.find(p => p.label === c.center);
+      return center ? center.x - c.radius : Infinity;
+    }));
+    const xMax = Math.max(...points.map(p => p.x), ...circles.map(c => {
+      const center = points.find(p => p.label === c.center);
+      return center ? center.x + c.radius : -Infinity;
+    }));
+    const yMin = Math.min(...points.map(p => p.y), ...circles.map(c => {
+      const center = points.find(p => p.label === c.center);
+      return center ? center.y - c.radius : Infinity;
+    }));
+    const yMax = Math.max(...points.map(p => p.y), ...circles.map(c => {
+      const center = points.find(p => p.label === c.center);
+      return center ? center.y + c.radius : -Infinity;
+    }));
 
     // 도형의 크기
     const shapeWidth = xMax - xMin;
@@ -54,6 +76,43 @@ const GeometryRenderer = ({ data }: Props) => {
     const yScale = d3.scaleLinear()
       .domain([yMin - shapeHeight * 0.1, yMax + shapeHeight * 0.1])
       .range([height - padding, padding]);
+
+    // 원 그리기
+    circles.forEach(circle => {
+      const centerPoint = points.find(p => p.label === circle.center);
+      if (centerPoint) {
+        // 원 그리기
+        svg.append('circle')
+          .attr('cx', xScale(centerPoint.x))
+          .attr('cy', yScale(centerPoint.y))
+          .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
+          .attr('stroke', 'black')
+          .attr('fill', 'none')
+          .attr('stroke-width', 1);
+
+        // 반지름 표시
+        if (circle.showRadius) {
+          // 반지름 선 그리기
+          svg.append('line')
+            .attr('x1', xScale(centerPoint.x))
+            .attr('y1', yScale(centerPoint.y))
+            .attr('x2', xScale(centerPoint.x + circle.radius))
+            .attr('y2', yScale(centerPoint.y))
+            .attr('stroke', 'black')
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '4');
+
+          // 반지름 텍스트
+          svg.append('text')
+            .attr('x', xScale(centerPoint.x + circle.radius / 2))
+            .attr('y', yScale(centerPoint.y) - 10)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('font-size', '12px')
+            .text(circle.radius.toString());
+        }
+      }
+    });
 
     // 선 그리기
     data.lines.forEach(line => {
