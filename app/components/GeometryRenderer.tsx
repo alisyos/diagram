@@ -77,17 +77,19 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     onDataChange({ ...data, points: newPoints });
   };
 
-  const handleLineChange = (index: number, field: keyof Line, value: string) => {
+  const handleLineChange = (index: number, field: keyof Line, value: string | boolean) => {
     if (!onDataChange) return;
     
     const newLines = [...data.lines];
     if (field === 'start' || field === 'end') {
-      newLines[index] = { ...newLines[index], [field]: value };
-    } else if (field === 'length' && value) {
+      newLines[index] = { ...newLines[index], [field]: value as string };
+    } else if (field === 'length' && typeof value === 'string') {
       const numValue = parseFloat(value);
       if (!isNaN(numValue)) {
         newLines[index] = { ...newLines[index], length: numValue };
       }
+    } else if (field === 'showLength') {
+      newLines[index] = { ...newLines[index], showLength: value as boolean };
     }
     
     onDataChange({ ...data, lines: newLines });
@@ -123,6 +125,77 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     }
     
     onDataChange({ ...data, circles: newCircles });
+  };
+
+  // 새로운 점 추가 핸들러
+  const handleAddPoint = () => {
+    if (!onDataChange) return;
+    
+    const newPoint: Point = {
+      label: String.fromCharCode(65 + data.points.length), // A, B, C, ... 순서로 라벨 생성
+      x: 0.00,
+      y: 0.00
+    };
+    
+    onDataChange({
+      ...data,
+      points: [...data.points, newPoint]
+    });
+  };
+
+  // 새로운 선분 추가 핸들러
+  const handleAddLine = () => {
+    if (!onDataChange || data.points.length < 2) return;
+    
+    const newLine: Line = {
+      start: data.points[0].label,
+      end: data.points[1].label,
+      showLength: false
+    };
+    
+    onDataChange({
+      ...data,
+      lines: [...data.lines, newLine]
+    });
+  };
+
+  // 점 삭제 핸들러
+  const handleDeletePoint = (index: number) => {
+    if (!onDataChange) return;
+    
+    const deletedLabel = data.points[index].label;
+    
+    // 삭제할 점과 연결된 선분, 각도, 원 찾기 및 제거
+    const newLines = data.lines.filter(line => 
+      line.start !== deletedLabel && line.end !== deletedLabel
+    );
+    const newAngles = data.angles.filter(angle => 
+      angle.vertex !== deletedLabel && angle.start !== deletedLabel && angle.end !== deletedLabel
+    );
+    const newCircles = data.circles.filter(circle => 
+      circle.center !== deletedLabel
+    );
+    
+    const newPoints = data.points.filter((_, idx) => idx !== index);
+    
+    onDataChange({
+      ...data,
+      points: newPoints,
+      lines: newLines,
+      angles: newAngles,
+      circles: newCircles
+    });
+  };
+
+  // 선분 삭제 핸들러
+  const handleDeleteLine = (index: number) => {
+    if (!onDataChange) return;
+    
+    const newLines = data.lines.filter((_, idx) => idx !== index);
+    onDataChange({
+      ...data,
+      lines: newLines
+    });
   };
 
   useEffect(() => {
@@ -341,10 +414,18 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       </div>
       <div className="w-full max-w-2xl p-4 bg-gray-50 rounded-lg shadow-sm space-y-2 text-sm font-mono">
         <div>
-          <h3 className="font-bold mb-1">점 좌표:</h3>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">점 좌표:</h3>
+            <button
+              onClick={handleAddPoint}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+            >
+              점 추가
+            </button>
+          </div>
           <div className="grid grid-cols-1 gap-2">
             {data.points.map((point, idx) => (
-              <div key={idx} className="bg-white p-2 rounded grid grid-cols-4 gap-2 items-center">
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-5 gap-2 items-center">
                 <input
                   type="text"
                   value={point.label}
@@ -368,44 +449,72 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                 <span className="text-xs text-gray-500">
                   {formatPoint(point)}
                 </span>
+                <button
+                  onClick={() => handleDeletePoint(idx)}
+                  className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                >
+                  ×
+                </button>
               </div>
             ))}
           </div>
         </div>
-        {data.lines.length > 0 && (
-          <div>
-            <h3 className="font-bold mb-1">선분:</h3>
-            <div className="grid grid-cols-1 gap-2">
-              {data.lines.map((line, idx) => (
-                <div key={idx} className="bg-white p-2 rounded grid grid-cols-4 gap-2 items-center">
-                  <input
-                    type="text"
-                    value={line.start}
-                    onChange={(e) => handleLineChange(idx, 'start', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                  />
-                  <input
-                    type="text"
-                    value={line.end}
-                    onChange={(e) => handleLineChange(idx, 'end', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                  />
-                  <input
-                    type="number"
-                    value={line.length || ''}
-                    onChange={(e) => handleLineChange(idx, 'length', e.target.value)}
-                    step="0.1"
-                    className="w-full p-1 border rounded"
-                    placeholder="길이"
-                  />
-                  <span className="text-xs text-gray-500">
-                    {formatLine(line)}
-                  </span>
-                </div>
-              ))}
-            </div>
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">선분:</h3>
+            <button
+              onClick={handleAddLine}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+              disabled={data.points.length < 2}
+            >
+              선분 추가
+            </button>
           </div>
-        )}
+          <div className="grid grid-cols-1 gap-2">
+            {data.lines.map((line, idx) => (
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-6 gap-2 items-center">
+                <input
+                  type="text"
+                  value={line.start}
+                  onChange={(e) => handleLineChange(idx, 'start', e.target.value)}
+                  className="w-full p-1 border rounded text-center"
+                />
+                <input
+                  type="text"
+                  value={line.end}
+                  onChange={(e) => handleLineChange(idx, 'end', e.target.value)}
+                  className="w-full p-1 border rounded text-center"
+                />
+                <input
+                  type="number"
+                  value={line.length || ''}
+                  onChange={(e) => handleLineChange(idx, 'length', e.target.value)}
+                  step="0.01"
+                  className="w-full p-1 border rounded"
+                  placeholder="길이"
+                />
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={line.showLength || false}
+                    onChange={(e) => handleLineChange(idx, 'showLength', e.target.checked)}
+                    className="mr-2"
+                  />
+                  <span className="text-xs">표시</span>
+                </div>
+                <span className="text-xs text-gray-500">
+                  {formatLine(line)}
+                </span>
+                <button
+                  onClick={() => handleDeleteLine(idx)}
+                  className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
         {data.angles.length > 0 && (
           <div>
             <h3 className="font-bold mb-1">각도:</h3>
