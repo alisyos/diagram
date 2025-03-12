@@ -51,6 +51,15 @@ export async function POST(request: Request) {
       "showLength": boolean // 길이를 표시할지 여부, 기본값 false
     }
   ],
+  "angles": [
+    {
+      "vertex": string,     // 각의 꼭지점 라벨
+      "start": string,      // 시작점 라벨
+      "end": string,        // 끝점 라벨
+      "value": number,      // 각도 값 (도 단위)
+      "showValue": boolean  // 각도를 표시할지 여부, 기본값 false
+    }
+  ],
   "circles": [
     {
       "center": string,     // 중심점 라벨
@@ -67,6 +76,7 @@ export async function POST(request: Request) {
 - 불필요한 점이나 선분을 추가하지 마세요
 - 문제에서 요구하는 모든 기하학적 조건을 만족해야 합니다
 - 문제에서 명시적으로 길이가 주어진 경우에만 해당 선분의 showLength를 true로 설정하세요
+- 문제에서 명시적으로 각도가 주어진 경우에만 해당 각도를 angles 배열에 포함하고 showValue를 true로 설정하세요
 - 단순히 도형을 구성하는 선분의 경우 showLength는 false로 설정하세요
 
 마크다운 코드 블록이나 다른 설명 없이 순수한 JSON 형식으로만 응답하세요.`
@@ -93,7 +103,7 @@ ${text}
       const normalizedContent = cleanContent.replace(/(-?\d+)\/(\d+)/g, (_, num, den) => (Number(num) / Number(den)).toString());
       const geometryData = JSON.parse(normalizedContent);
       
-      if (!geometryData.points || !geometryData.lines || !geometryData.circles) {
+      if (!geometryData.points || !geometryData.lines || !geometryData.angles || !geometryData.circles) {
         throw new Error('잘못된 도형 데이터 형식입니다.');
       }
       return NextResponse.json(geometryData);
