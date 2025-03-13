@@ -28,16 +28,65 @@ interface Circle {
   showRadius?: boolean;
 }
 
+interface Curve {
+  type: string;
+  base?: number;
+  coefficient?: number;
+  xRange: {
+    min: number;
+    max: number;
+  };
+  points: number;
+}
+
 interface GeometryData {
   points: Point[];
   lines: Line[];
   angles: Angle[];
   circles: Circle[];
+  curves: Curve[];
 }
 
 interface Props {
   data: GeometryData;
   onDataChange?: (newData: GeometryData) => void;
+}
+
+// 곡선 생성 함수
+const generateCurvePoints = (curve: Curve): Point[] => {
+  const numPoints = curve.points || 100;
+  const points: Point[] = [];
+  const step = (curve.xRange.max - curve.xRange.min) / (numPoints - 1);
+
+  for (let i = 0; i < numPoints; i++) {
+    const x = curve.xRange.min + i * step;
+    let y = 0;
+
+    switch (curve.type) {
+      case 'logarithm':
+        if (x > 0) {
+          const base = curve.base || Math.E;
+          y = Math.log(x) / Math.log(base);
+        }
+        break;
+      case 'exponential':
+        const base = curve.base || Math.E;
+        y = Math.pow(base, x);
+        break;
+      case 'linear':
+        const coef = curve.coefficient || 1;
+        y = coef * x;
+        break;
+      case 'quadratic':
+        const a = curve.coefficient || 1;
+        y = a * x * x;
+        break;
+    }
+
+    points.push({ x, y, label: '' });
+  }
+
+  return points;
 }
 
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
@@ -198,6 +247,63 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     });
   };
 
+  // 새로운 곡선 추가 핸들러
+  const handleAddCurve = () => {
+    if (!onDataChange) return;
+    
+    const newCurve: Curve = {
+      type: "linear", // 기본값은 선형 함수
+      coefficient: 1,
+      xRange: {
+        min: 0,
+        max: 10
+      },
+      points: 100
+    };
+    
+    onDataChange({
+      ...data,
+      curves: [...data.curves, newCurve]
+    });
+  };
+
+  // 곡선 삭제 핸들러
+  const handleDeleteCurve = (index: number) => {
+    if (!onDataChange) return;
+    
+    const newCurves = data.curves.filter((_, idx) => idx !== index);
+    onDataChange({
+      ...data,
+      curves: newCurves
+    });
+  };
+
+  // 곡선 속성 변경 핸들러
+  const handleCurveChange = (index: number, field: string, value: string | number) => {
+    if (!onDataChange) return;
+    
+    const newCurves = [...data.curves];
+    
+    if (field === 'type') {
+      newCurves[index] = { ...newCurves[index], type: value as string };
+    } else if (field === 'base' || field === 'coefficient' || field === 'points') {
+      const numValue = typeof value === 'string' ? parseFloat(value) : value;
+      if (!isNaN(numValue)) {
+        newCurves[index] = { ...newCurves[index], [field]: numValue };
+      }
+    } else if (field === 'xMin' || field === 'xMax') {
+      const numValue = typeof value === 'string' ? parseFloat(value) : value;
+      if (!isNaN(numValue)) {
+        const xRange = { ...newCurves[index].xRange };
+        if (field === 'xMin') xRange.min = numValue;
+        if (field === 'xMax') xRange.max = numValue;
+        newCurves[index] = { ...newCurves[index], xRange };
+      }
+    }
+    
+    onDataChange({ ...data, curves: newCurves });
+  };
+
   useEffect(() => {
     if (!svgRef.current || !data) return;
 
@@ -211,24 +317,74 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     // 도형의 경계 계산
     const points = data.points;
     const circles = data.circles || [];
+    const curves = data.curves || [];
     
-    const xMin = Math.min(...points.map(p => p.x), ...circles.map(c => {
+    // 곡선의 범위를 고려하여 경계 계산
+    let xMin = Math.min(...points.map(p => p.x), ...circles.map(c => {
       const center = points.find(p => p.label === c.center);
       return center ? center.x - c.radius : Infinity;
     }));
-    const xMax = Math.max(...points.map(p => p.x), ...circles.map(c => {
+    
+    let xMax = Math.max(...points.map(p => p.x), ...circles.map(c => {
       const center = points.find(p => p.label === c.center);
       return center ? center.x + c.radius : -Infinity;
     }));
-    const yMin = Math.min(...points.map(p => p.y), ...circles.map(c => {
+    
+    let yMin = Math.min(...points.map(p => p.y), ...circles.map(c => {
       const center = points.find(p => p.label === c.center);
       return center ? center.y - c.radius : Infinity;
     }));
-    const yMax = Math.max(...points.map(p => p.y), ...circles.map(c => {
+    
+    let yMax = Math.max(...points.map(p => p.y), ...circles.map(c => {
       const center = points.find(p => p.label === c.center);
       return center ? center.y + c.radius : -Infinity;
     }));
-
+    
+    // 곡선이 있는 경우 범위 확장
+    if (curves.length > 0) {
+      // 곡선의 x 범위 고려
+      xMin = Math.min(xMin, ...curves.map(c => c.xRange.min));
+      xMax = Math.max(xMax, ...curves.map(c => c.xRange.max));
+      
+      // y 범위는 곡선 함수 계산 필요
+      const yValues: number[] = [];
+      
+      curves.forEach(curve => {
+        const { min, max } = curve.xRange;
+        const step = (max - min) / (curve.points || 100);
+        
+        for (let x = min; x <= max; x += step) {
+          if (x <= 0 && curve.type === 'logarithm') continue; // 로그 함수는 x > 0에서만 정의
+          
+          let y = 0;
+          const coef = curve.coefficient || 1;
+          const base = curve.base || Math.E;
+          
+          switch (curve.type) {
+            case 'linear':
+              y = coef * x;
+              break;
+            case 'quadratic':
+              y = coef * x * x;
+              break;
+            case 'logarithm':
+              y = coef * Math.log(x) / Math.log(base);
+              break;
+            case 'exponential':
+              y = coef * Math.pow(base, x);
+              break;
+          }
+          
+          yValues.push(y);
+        }
+      });
+      
+      if (yValues.length > 0) {
+        yMin = Math.min(yMin, ...yValues);
+        yMax = Math.max(yMax, ...yValues);
+      }
+    }
+    
     // 도형의 크기
     const shapeWidth = xMax - xMin;
     const shapeHeight = yMax - yMin;
@@ -242,85 +398,117 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       .domain([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]) // 여백 비율 증가
       .range([height - padding, padding]);
 
-    // 원 그리기
-    data.circles.forEach(circle => {
-      const centerPoint = points.find(p => p.label === circle.center);
-      if (centerPoint) {
-        // 원 그리기
-        svg.append('circle')
-          .attr('cx', xScale(centerPoint.x))
-          .attr('cy', yScale(centerPoint.y))
-          .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
-          .attr('stroke', 'black')
-          .attr('fill', 'none')
-          .attr('stroke-width', 1);
+    // 곡선이 있는 경우에만 축 그리기
+    if (curves.length > 0) {
+      const xAxis = d3.axisBottom(xScale);
+      const yAxis = d3.axisLeft(yScale);
+      
+      svg.append('g')
+        .attr('transform', `translate(0, ${yScale(0)})`)
+        .call(xAxis);
+      
+      svg.append('g')
+        .attr('transform', `translate(${xScale(0)}, 0)`)
+        .call(yAxis);
+    }
 
-        // 반지름 표시
-        if (circle.showRadius) {
-          // 반지름 선 그리기
-          svg.append('line')
-            .attr('x1', xScale(centerPoint.x))
-            .attr('y1', yScale(centerPoint.y))
-            .attr('x2', xScale(centerPoint.x + circle.radius))
-            .attr('y2', yScale(centerPoint.y))
-            .attr('stroke', 'black')
-            .attr('stroke-width', 1)
-            .attr('stroke-dasharray', '4');
-
-          // 반지름 텍스트
-          svg.append('text')
-            .attr('x', xScale(centerPoint.x + circle.radius / 2))
-            .attr('y', yScale(centerPoint.y) - 10)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .attr('font-size', '12px')
-            .text(circle.radius.toString());
+    // 곡선 그리기
+    curves.forEach(curve => {
+      const { min, max } = curve.xRange;
+      const step = (max - min) / (curve.points || 100);
+      const points: [number, number][] = [];
+      
+      for (let x = min; x <= max; x += step) {
+        if (x <= 0 && curve.type === 'logarithm') continue; // 로그 함수는 x > 0에서만 정의
+        
+        let y = 0;
+        const coef = curve.coefficient || 1;
+        const base = curve.base || Math.E;
+        
+        switch (curve.type) {
+          case 'linear':
+            y = coef * x;
+            break;
+          case 'quadratic':
+            y = coef * x * x;
+            break;
+          case 'logarithm':
+            y = coef * Math.log(x) / Math.log(base);
+            break;
+          case 'exponential':
+            y = coef * Math.pow(base, x);
+            break;
         }
+        
+        points.push([x, y]);
       }
+      
+      const line = d3.line()
+        .x(d => xScale(d[0]))
+        .y(d => yScale(d[1]))
+        .curve(d3.curveMonotoneX);
+      
+      svg.append('path')
+        .datum(points)
+        .attr('fill', 'none')
+        .attr('stroke', curve.type === 'linear' ? '#ff6b6b' : '#4dabf7')
+        .attr('stroke-width', 2)
+        .attr('d', line);
+      
+      // 함수 이름 표시
+      const lastPoint = points[points.length - 1];
+      let label = '';
+      const coef = curve.coefficient || 1;
+      const base = curve.base || Math.E;
+      
+      switch (curve.type) {
+        case 'linear':
+          label = `y = ${coef}x`;
+          break;
+        case 'quadratic':
+          label = `y = ${coef}x²`;
+          break;
+        case 'logarithm':
+          label = `y = ${coef}log${base !== Math.E ? base : ''}(x)`;
+          break;
+        case 'exponential':
+          label = `y = ${coef}${base !== Math.E ? base : 'e'}^x`;
+          break;
+      }
+      
+      svg.append('text')
+        .attr('x', xScale(lastPoint[0]))
+        .attr('y', yScale(lastPoint[1]) - 10)
+        .attr('text-anchor', 'end')
+        .attr('font-size', '12px')
+        .text(label);
     });
 
-    // 선 그리기
+    // 선분 그리기
     data.lines.forEach(line => {
       const startPoint = points.find(p => p.label === line.start);
       const endPoint = points.find(p => p.label === line.end);
-      
+
       if (startPoint && endPoint) {
-        // 선분 그리기
         svg.append('line')
           .attr('x1', xScale(startPoint.x))
           .attr('y1', yScale(startPoint.y))
           .attr('x2', xScale(endPoint.x))
           .attr('y2', yScale(endPoint.y))
-          .attr('stroke', 'black')
-          .attr('stroke-width', 1);
+          .attr('stroke', '#212529')
+          .attr('stroke-width', 2);
 
         // 길이 표시
-        if (line.showLength && line.length !== undefined) {
+        if (line.showLength && line.length) {
           const midX = (startPoint.x + endPoint.x) / 2;
           const midY = (startPoint.y + endPoint.y) / 2;
           
-          // 선분의 방향 벡터 계산
-          const dx = endPoint.x - startPoint.x;
-          const dy = endPoint.y - startPoint.y;
-          const length = Math.sqrt(dx * dx + dy * dy);
-          
-          // 수직 방향 벡터 계산
-          const perpX = -dy / length;
-          const perpY = dx / length;
-          
-          // 길이 표시 위치 계산 (선분 바깥쪽)
-          const offset = 0.3; // 선분으로부터의 거리
-          const textX = midX + perpX * offset;
-          const textY = midY + perpY * offset;
-
-          // 길이 텍스트
           svg.append('text')
-            .attr('x', xScale(textX))
-            .attr('y', yScale(textY))
+            .attr('x', xScale(midX))
+            .attr('y', yScale(midY) - 10)
             .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
             .attr('font-size', '12px')
-            .text(line.length.toString());
+            .text(`${line.length.toFixed(2)}`);
         }
       }
     });
@@ -331,71 +519,103 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const startPoint = points.find(p => p.label === angle.start);
       const endPoint = points.find(p => p.label === angle.end);
 
-      if (vertexPoint && startPoint && endPoint && angle.showValue) {
-        // 각도의 두 벡터 계산
-        const v1x = startPoint.x - vertexPoint.x;
-        const v1y = startPoint.y - vertexPoint.y;
-        const v2x = endPoint.x - vertexPoint.x;
-        const v2y = endPoint.y - vertexPoint.y;
+      if (vertexPoint && startPoint && endPoint) {
+        // 각도 계산
+        const startVector = {
+          x: startPoint.x - vertexPoint.x,
+          y: startPoint.y - vertexPoint.y
+        };
+        const endVector = {
+          x: endPoint.x - vertexPoint.x,
+          y: endPoint.y - vertexPoint.y
+        };
 
-        // 각도 계산 (라디안)
-        const angle1 = Math.atan2(v1y, v1x);
-        const angle2 = Math.atan2(v2y, v2x);
-
-        // 호의 반지름
-        const radius = Math.min(
-          Math.sqrt(v1x * v1x + v1y * v1y),
-          Math.sqrt(v2x * v2x + v2y * v2y)
-        ) * 0.2; // 벡터 길이의 20%
-
-        // 호 그리기
+        const startAngle = Math.atan2(startVector.y, startVector.x);
+        const endAngle = Math.atan2(endVector.y, endVector.x);
+        
+        // 각도 호 그리기
+        const radius = 20; // 호의 반지름 (픽셀 단위)
         const arcGenerator = d3.arc()
-          .innerRadius(radius * 0.8)
+          .innerRadius(radius)
           .outerRadius(radius)
-          .startAngle(Math.min(angle1, angle2))
-          .endAngle(Math.max(angle1, angle2));
-
-        // SVG 그룹 생성 및 변환
-        const g = svg.append('g')
-          .attr('transform', `translate(${xScale(vertexPoint.x)},${yScale(vertexPoint.y)})`);
-
-        // 호 그리기
-        g.append('path')
+          .startAngle(startAngle)
+          .endAngle(endAngle);
+        
+        svg.append('path')
           .attr('d', arcGenerator({} as any))
-          .attr('fill', 'black')
-          .attr('opacity', 0.2);
+          .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
+          .attr('fill', 'none')
+          .attr('stroke', '#fd7e14')
+          .attr('stroke-width', 2);
+        
+        // 각도 값 표시
+        if (angle.showValue) {
+          const midAngle = (startAngle + endAngle) / 2;
+          const labelRadius = radius + 10;
+          const labelX = vertexPoint.x + Math.cos(midAngle) * labelRadius / (width / (xScale.domain()[1] - xScale.domain()[0]));
+          const labelY = vertexPoint.y + Math.sin(midAngle) * labelRadius / (height / (yScale.domain()[0] - yScale.domain()[1]));
+          
+          svg.append('text')
+            .attr('x', xScale(labelX))
+            .attr('y', yScale(labelY))
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '12px')
+            .text(`${angle.value}°`);
+        }
+      }
+    });
 
-        // 각도 표시
-        const midAngle = (angle1 + angle2) / 2;
-        const textRadius = radius * 1.2;
-        const textX = Math.cos(midAngle) * textRadius;
-        const textY = -Math.sin(midAngle) * textRadius; // SVG 좌표계는 Y축이 반전됨
+    // 원 그리기
+    data.circles.forEach(circle => {
+      const centerPoint = points.find(p => p.label === circle.center);
 
-        g.append('text')
-          .attr('x', textX)
-          .attr('y', textY)
-          .attr('text-anchor', 'middle')
-          .attr('dominant-baseline', 'middle')
-          .attr('font-size', '12px')
-          .text(`${angle.value}°`);
+      if (centerPoint) {
+        svg.append('circle')
+          .attr('cx', xScale(centerPoint.x))
+          .attr('cy', yScale(centerPoint.y))
+          .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
+          .attr('fill', 'none')
+          .attr('stroke', '#20c997')
+          .attr('stroke-width', 2);
+        
+        // 반지름 표시
+        if (circle.showRadius) {
+          const radiusEndX = centerPoint.x + circle.radius;
+          const radiusEndY = centerPoint.y;
+          
+          // 반지름 선 그리기
+          svg.append('line')
+            .attr('x1', xScale(centerPoint.x))
+            .attr('y1', yScale(centerPoint.y))
+            .attr('x2', xScale(radiusEndX))
+            .attr('y2', yScale(radiusEndY))
+            .attr('stroke', '#20c997')
+            .attr('stroke-width', 1)
+            .attr('stroke-dasharray', '4');
+          
+          // 반지름 값 표시
+          svg.append('text')
+            .attr('x', xScale((centerPoint.x + radiusEndX) / 2))
+            .attr('y', yScale(radiusEndY) - 10)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '12px')
+            .text(`r=${circle.radius.toFixed(2)}`);
+        }
       }
     });
 
     // 점 그리기
     points.forEach(point => {
-      // 점
       svg.append('circle')
         .attr('cx', xScale(point.x))
         .attr('cy', yScale(point.y))
-        .attr('r', 3)
-        .attr('fill', 'black');
+        .attr('r', 5)
+        .attr('fill', '#4dabf7');
 
-      // 점 라벨
       svg.append('text')
-        .attr('x', xScale(point.x))
+        .attr('x', xScale(point.x) + 10)
         .attr('y', yScale(point.y) - 10)
-        .attr('text-anchor', 'middle')
-        .attr('font-size', '12px')
+        .attr('font-size', '14px')
         .text(point.label);
     });
   }, [data]);
@@ -581,6 +801,80 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </div>
           </div>
         )}
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">곡선:</h3>
+            <button
+              onClick={handleAddCurve}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+            >
+              곡선 추가
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {data.curves.map((curve, idx) => (
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-6 gap-2 items-center">
+                  <select
+                    value={curve.type}
+                    onChange={(e) => handleCurveChange(idx, 'type', e.target.value)}
+                    className="w-full p-1 border rounded"
+                  >
+                    <option value="linear">선형 (y = x)</option>
+                    <option value="logarithm">로그 (y = log x)</option>
+                    <option value="exponential">지수 (y = e^x)</option>
+                    <option value="quadratic">이차 (y = x²)</option>
+                  </select>
+                  
+                  {(curve.type === 'logarithm' || curve.type === 'exponential') && (
+                    <input
+                      type="number"
+                      value={curve.base || ''}
+                      onChange={(e) => handleCurveChange(idx, 'base', e.target.value)}
+                      step="0.1"
+                      className="w-full p-1 border rounded"
+                      placeholder="밑"
+                    />
+                  )}
+                  
+                  <input
+                    type="number"
+                    value={curve.coefficient || ''}
+                    onChange={(e) => handleCurveChange(idx, 'coefficient', e.target.value)}
+                    step="0.1"
+                    className="w-full p-1 border rounded"
+                    placeholder="계수"
+                  />
+                  
+                  <input
+                    type="number"
+                    value={curve.xRange.min}
+                    onChange={(e) => handleCurveChange(idx, 'xMin', e.target.value)}
+                    step="0.1"
+                    className="w-full p-1 border rounded"
+                    placeholder="x 최소"
+                  />
+                  
+                  <input
+                    type="number"
+                    value={curve.xRange.max}
+                    onChange={(e) => handleCurveChange(idx, 'xMax', e.target.value)}
+                    step="0.1"
+                    className="w-full p-1 border rounded"
+                    placeholder="x 최대"
+                  />
+                  
+                  <button
+                    onClick={() => handleDeleteCurve(idx)}
+                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

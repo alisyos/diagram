@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `당신은 수학 문제의 도형을 분석하여 JSON 형식으로 변환하는 전문가입니다.
+          content: `당신은 수학 문제의 도형과 그래프를 분석하여 JSON 형식으로 변환하는 전문가입니다.
 
 주어진 문제를 분석하여 다음을 수행하세요:
 1. 문제에서 언급된 모든 점들을 식별합니다.
@@ -30,6 +30,7 @@ export async function POST(request: Request) {
 3. 도형의 특성(평행, 수직, 길이 비율 등)을 분석합니다.
 4. 모든 기하학적 조건을 만족하는 좌표를 계산합니다.
 5. 원이 언급된 경우, 중심점과 반지름을 식별합니다.
+6. 함수 그래프가 포함된 경우, 함수의 종류와 범위를 식별합니다.
 
 직각삼각형 처리 방법:
 1. 직각이 있는 꼭지점을 기준점으로 설정합니다.
@@ -66,6 +67,18 @@ export async function POST(request: Request) {
       "radius": number,     // 반지름 길이
       "showRadius": boolean // 반지름을 표시할지 여부, 기본값 false
     }
+  ],
+  "curves": [
+    {
+      "type": string,      // 곡선의 종류 (예: "logarithm", "exponential", "linear", "quadratic")
+      "base": number,      // 로그나 지수 함수의 밑 (선택적)
+      "coefficient": number, // 계수 (선택적)
+      "xRange": {          // x축 범위
+        "min": number,
+        "max": number
+      },
+      "points": number     // 곡선을 그리기 위한 점의 개수 (기본값 100)
+    }
   ]
 }
 
@@ -78,6 +91,10 @@ export async function POST(request: Request) {
 - 문제에서 명시적으로 길이가 주어진 경우에만 해당 선분의 showLength를 true로 설정하세요
 - 문제에서 명시적으로 각도가 주어진 경우에만 해당 각도를 angles 배열에 포함하고 showValue를 true로 설정하세요
 - 단순히 도형을 구성하는 선분의 경우 showLength는 false로 설정하세요
+- 곡선이 포함된 경우 적절한 x축 범위를 설정하세요
+- 로그 함수의 경우 정의역이 양수인 부분만 표시되도록 하세요
+- 함수 그래프의 경우 적절한 스케일로 표시되도록 좌표를 조정하세요
+- 여러 함수가 포함된 경우 각 함수의 특성이 잘 드러나도록 범위를 설정하세요
 
 마크다운 코드 블록이나 다른 설명 없이 순수한 JSON 형식으로만 응답하세요.`
         },
@@ -103,7 +120,7 @@ ${text}
       const normalizedContent = cleanContent.replace(/(-?\d+)\/(\d+)/g, (_, num, den) => (Number(num) / Number(den)).toString());
       const geometryData = JSON.parse(normalizedContent);
       
-      if (!geometryData.points || !geometryData.lines || !geometryData.angles || !geometryData.circles) {
+      if (!geometryData.points || !geometryData.lines || !geometryData.angles || !geometryData.circles || !geometryData.curves) {
         throw new Error('잘못된 도형 데이터 형식입니다.');
       }
       return NextResponse.json(geometryData);
