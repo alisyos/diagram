@@ -20,6 +20,7 @@ interface Angle {
   end: string;
   value: number;
   showValue: boolean;
+  rotation?: number;
 }
 
 interface Circle {
@@ -144,17 +145,19 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     onDataChange({ ...data, lines: newLines });
   };
 
-  const handleAngleChange = (index: number, field: keyof Angle, value: string) => {
+  const handleAngleChange = (index: number, field: keyof Angle, value: string | boolean) => {
     if (!onDataChange) return;
     
     const newAngles = [...data.angles];
     if (field === 'vertex' || field === 'start' || field === 'end') {
-      newAngles[index] = { ...newAngles[index], [field]: value };
+      newAngles[index] = { ...newAngles[index], [field]: value as string };
     } else if (field === 'value') {
-      const numValue = parseFloat(value);
+      const numValue = parseFloat(value as string);
       if (!isNaN(numValue)) {
         newAngles[index] = { ...newAngles[index], value: numValue };
       }
+    } else if (field === 'showValue' || field === 'rotation') {
+      newAngles[index] = { ...newAngles[index], [field]: value };
     }
     
     onDataChange({ ...data, angles: newAngles });
@@ -530,16 +533,49 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           y: endPoint.y - vertexPoint.y
         };
 
+        // 벡터의 각도 계산 (라디안)
         const startAngle = Math.atan2(startVector.y, startVector.x);
         const endAngle = Math.atan2(endVector.y, endVector.x);
         
+        // 두 벡터 사이의 각도 계산 (라디안)
+        let angleDiff = endAngle - startAngle;
+        
+        // 각도가 180도를 넘지 않도록 조정
+        if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        
+        // 각도의 방향이 반시계 방향인지 확인
+        const isCounterClockwise = angleDiff > 0;
+        
+        // 각도 값이 주어진 경우, 그 값을 사용하여 호의 끝 각도 계산
+        let actualEndAngle;
+        if (angle.value !== undefined) {
+          // 각도를 라디안으로 변환
+          const angleInRadians = (angle.value * Math.PI) / 180;
+          
+          // 시작 각도에서 주어진 각도만큼 이동
+          actualEndAngle = startAngle + (isCounterClockwise ? angleInRadians : -angleInRadians);
+        } else {
+          actualEndAngle = endAngle;
+        }
+        
+        // 사용자 지정 회전 적용 (라디안으로 변환)
+        const rotationOffset = angle.rotation ? (angle.rotation * Math.PI) / 180 : 0;
+        const adjustedStartAngle = startAngle + rotationOffset;
+        const adjustedEndAngle = actualEndAngle + rotationOffset;
+        
         // 각도 호 그리기
         const radius = 20; // 호의 반지름 (픽셀 단위)
+        
+        // SVG 좌표계에서는 y축이 반전되어 있으므로 각도도 반전
+        // D3의 arc 함수는 시계 방향으로 각도를 측정하지만, 
+        // SVG 좌표계에서는 y축이 아래로 증가하므로 반시계 방향으로 그려짐
         const arcGenerator = d3.arc()
           .innerRadius(radius)
           .outerRadius(radius)
-          .startAngle(startAngle)
-          .endAngle(endAngle);
+          .startAngle(adjustedStartAngle)
+          .endAngle(adjustedEndAngle)
+          .context(null);
         
         svg.append('path')
           .attr('d', arcGenerator({} as any))
@@ -550,16 +586,20 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 각도 값 표시
         if (angle.showValue) {
-          const midAngle = (startAngle + endAngle) / 2;
+          const midAngle = (adjustedStartAngle + adjustedEndAngle) / 2;
           const labelRadius = radius + 10;
-          const labelX = vertexPoint.x + Math.cos(midAngle) * labelRadius / (width / (xScale.domain()[1] - xScale.domain()[0]));
-          const labelY = vertexPoint.y + Math.sin(midAngle) * labelRadius / (height / (yScale.domain()[0] - yScale.domain()[1]));
+          
+          // 화면 좌표계에서의 위치 계산
+          const screenX = xScale(vertexPoint.x) + Math.cos(midAngle) * labelRadius;
+          const screenY = yScale(vertexPoint.y) + Math.sin(midAngle) * labelRadius;
           
           svg.append('text')
-            .attr('x', xScale(labelX))
-            .attr('y', yScale(labelY))
+            .attr('x', screenX)
+            .attr('y', screenY)
             .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
             .attr('font-size', '12px')
+            .attr('fill', '#fd7e14')
             .text(`${angle.value}°`);
         }
       }
@@ -740,35 +780,66 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             <h3 className="font-bold mb-1">각도:</h3>
             <div className="grid grid-cols-1 gap-2">
               {data.angles.map((angle, idx) => (
-                <div key={idx} className="bg-white p-2 rounded grid grid-cols-5 gap-2 items-center">
-                  <input
-                    type="text"
-                    value={angle.vertex}
-                    onChange={(e) => handleAngleChange(idx, 'vertex', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                  />
-                  <input
-                    type="text"
-                    value={angle.start}
-                    onChange={(e) => handleAngleChange(idx, 'start', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                  />
-                  <input
-                    type="text"
-                    value={angle.end}
-                    onChange={(e) => handleAngleChange(idx, 'end', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                  />
-                  <input
-                    type="number"
-                    value={angle.value}
-                    onChange={(e) => handleAngleChange(idx, 'value', e.target.value)}
-                    step="1"
-                    className="w-full p-1 border rounded"
-                  />
-                  <span className="text-xs text-gray-500">
-                    {formatAngle(angle)}
-                  </span>
+                <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                  <div className="grid grid-cols-6 gap-2 items-center">
+                    <input
+                      type="text"
+                      value={angle.vertex}
+                      onChange={(e) => handleAngleChange(idx, 'vertex', e.target.value)}
+                      className="w-full p-1 border rounded text-center"
+                      placeholder="꼭지점"
+                    />
+                    <input
+                      type="text"
+                      value={angle.start}
+                      onChange={(e) => handleAngleChange(idx, 'start', e.target.value)}
+                      className="w-full p-1 border rounded text-center"
+                      placeholder="시작점"
+                    />
+                    <input
+                      type="text"
+                      value={angle.end}
+                      onChange={(e) => handleAngleChange(idx, 'end', e.target.value)}
+                      className="w-full p-1 border rounded text-center"
+                      placeholder="끝점"
+                    />
+                    <input
+                      type="number"
+                      value={angle.value}
+                      onChange={(e) => handleAngleChange(idx, 'value', e.target.value)}
+                      step="1"
+                      className="w-full p-1 border rounded"
+                      placeholder="각도"
+                    />
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={angle.showValue || false}
+                        onChange={(e) => handleAngleChange(idx, 'showValue', e.target.checked)}
+                        className="mr-2"
+                      />
+                      <span className="text-xs">표시</span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {formatAngle(angle)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 items-center mt-1">
+                    <div className="flex items-center">
+                      <span className="text-xs mr-2">회전:</span>
+                      <input
+                        type="number"
+                        value={angle.rotation || 0}
+                        onChange={(e) => handleAngleChange(idx, 'rotation', e.target.value)}
+                        step="5"
+                        className="w-full p-1 border rounded"
+                        placeholder="회전 (도)"
+                      />
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      회전 각도: {angle.rotation || 0}°
+                    </span>
+                  </div>
                 </div>
               ))}
             </div>
