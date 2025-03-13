@@ -564,28 +564,28 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         const adjustedStartAngle = startAngle + rotationOffset;
         const adjustedEndAngle = actualEndAngle + rotationOffset;
         
-        // 각도 호 그리기
-        const radius = 20; // 호의 반지름 (픽셀 단위)
-        
-        // SVG 좌표계에서는 y축이 반전되어 있으므로 각도도 반전
-        // D3의 arc 함수는 시계 방향으로 각도를 측정하지만, 
-        // SVG 좌표계에서는 y축이 아래로 증가하므로 반시계 방향으로 그려짐
-        const arcGenerator = d3.arc()
-          .innerRadius(radius)
-          .outerRadius(radius)
-          .startAngle(adjustedStartAngle)
-          .endAngle(adjustedEndAngle)
-          .context(null);
-        
-        svg.append('path')
-          .attr('d', arcGenerator({} as any))
-          .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
-          .attr('fill', 'none')
-          .attr('stroke', '#fd7e14')
-          .attr('stroke-width', 2);
-        
-        // 각도 값 표시
+        // 각도 호 그리기 (showValue가 true인 경우에만)
         if (angle.showValue) {
+          const radius = 20; // 호의 반지름 (픽셀 단위)
+          
+          // SVG 좌표계에서는 y축이 반전되어 있으므로 각도도 반전
+          // D3의 arc 함수는 시계 방향으로 각도를 측정하지만, 
+          // SVG 좌표계에서는 y축이 아래로 증가하므로 반시계 방향으로 그려짐
+          const arcGenerator = d3.arc()
+            .innerRadius(radius)
+            .outerRadius(radius)
+            .startAngle(adjustedStartAngle)
+            .endAngle(adjustedEndAngle)
+            .context(null);
+          
+          svg.append('path')
+            .attr('d', arcGenerator({} as any))
+            .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
+            .attr('fill', 'none')
+            .attr('stroke', '#fd7e14')
+            .attr('stroke-width', 2);
+          
+          // 각도 값 표시
           const midAngle = (adjustedStartAngle + adjustedEndAngle) / 2;
           const labelRadius = radius + 10;
           
