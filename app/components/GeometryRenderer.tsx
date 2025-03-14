@@ -789,8 +789,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   }, [data, onDataChange, showGrid]); // showGrid 의존성 추가
 
   return (
-    <div className="flex flex-col items-center space-y-4">
-      <div className="w-full overflow-auto border rounded-lg">
+    <div className="flex flex-col md:flex-row items-start gap-4 w-full">
+      <div className="w-full md:w-1/2 overflow-auto border rounded-lg">
         <div className="flex justify-end p-2 bg-gray-50 border-b">
           <div className="flex items-center">
             <label className="inline-flex items-center cursor-pointer mr-4">
@@ -814,7 +814,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           className="mx-auto"
         />
       </div>
-      <div className="w-full max-w-2xl p-4 bg-gray-50 rounded-lg shadow-sm space-y-2 text-sm font-mono">
+      
+      <div className="w-full md:w-1/2 p-4 bg-gray-50 rounded-lg shadow-sm space-y-4 text-sm font-mono max-h-[600px] overflow-y-auto">
         <div>
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold">점 좌표:</h3>
@@ -861,6 +862,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             ))}
           </div>
         </div>
+        
         <div>
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold">선분:</h3>
@@ -917,6 +919,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             ))}
           </div>
         </div>
+        
         {data.angles.length > 0 && (
           <div>
             <h3 className="font-bold mb-1">각도:</h3>
@@ -987,6 +990,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </div>
           </div>
         )}
+        
         {data.circles.length > 0 && (
           <div>
             <h3 className="font-bold mb-1">원:</h3>
@@ -1014,6 +1018,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </div>
           </div>
         )}
+        
         <div>
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold">곡선:</h3>

@@ -130,8 +130,8 @@ export default function Home() {
   };
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <main className="min-h-screen p-4 md:p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         <h1 className="text-2xl font-bold text-center mb-8">수학 도형 생성기</h1>
         
         {/* 이미지 선택 및 드래그 영역 */}
@@ -200,12 +200,22 @@ export default function Home() {
           </div>
         )}
 
+        {analyzedText && !geometryData && (
+          <div className="p-4 bg-blue-100 text-blue-700 rounded-lg mb-4">
+            <p className="font-bold">분석이 완료되었습니다!</p>
+            <p>분석된 내용을 확인하고 필요한 경우 수정한 후, 아래 "도형 생성" 버튼을 클릭하세요.</p>
+          </div>
+        )}
+
         {/* 생성된 도형 */}
         {geometryData && (
-          <GeometryRenderer 
-            data={geometryData} 
-            onDataChange={handleDataChange}
-          />
+          <div className="w-full">
+            <h2 className="text-xl font-bold mb-4">생성된 도형</h2>
+            <GeometryRenderer 
+              data={geometryData} 
+              onDataChange={handleDataChange}
+            />
+          </div>
         )}
       </div>
     </main>

@@ -25,9 +25,21 @@ export interface Circle {
   showRadius?: boolean;
 }
 
+export interface Curve {
+  type: string;
+  base?: number;
+  coefficient?: number;
+  xRange: {
+    min: number;
+    max: number;
+  };
+  points: number;
+}
+
 export interface GeometryData {
   points: Point[];
   lines: Line[];
   angles: Angle[];
   circles: Circle[];
+  curves: Curve[];
 }
