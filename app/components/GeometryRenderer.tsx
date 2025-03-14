@@ -579,23 +579,40 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const shapeWidth = Math.max(xMax - xMin, 20);
     const shapeHeight = Math.max(yMax - yMin, 20);
 
+    // 정사각형 모눈종이를 위한 스케일 조정
+    // 더 넓은 범위를 기준으로 동일한 스케일 적용
+    const maxRange = Math.max(shapeWidth, shapeHeight);
+    const xPadding = (maxRange - shapeWidth) / 2;
+    const yPadding = (maxRange - shapeHeight) / 2;
+
+    // SVG의 가로세로 비율 계산
+    const svgAspectRatio = (width - 2 * padding) / (height - 2 * padding);
+    
+    // x축과 y축의 스케일을 완전히 동일하게 설정
+    // SVG의 가로세로 비율을 고려하여 도메인 범위 조정
+    const xDomainSize = (maxRange + shapeWidth * 0.4) * svgAspectRatio;
+    const yDomainSize = maxRange + shapeHeight * 0.4;
+    
+    const xDomainCenter = (xMin + xMax) / 2;
+    const yDomainCenter = (yMin + yMax) / 2;
+
     // 스케일 조정 (여백을 고려한 중앙 정렬)
     const xScale = d3.scaleLinear()
-      .domain([xMin - shapeWidth * 0.2, xMax + shapeWidth * 0.2]) // 여백 비율 증가
+      .domain([xDomainCenter - xDomainSize / 2, xDomainCenter + xDomainSize / 2])
       .range([padding, width - padding]);
 
     const yScale = d3.scaleLinear()
-      .domain([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]) // 여백 비율 증가
+      .domain([yDomainCenter - yDomainSize / 2, yDomainCenter + yDomainSize / 2])
       .range([height - padding, padding]);
 
     // 역 스케일 함수 (SVG 좌표 -> 실제 좌표)
     const xInverse = d3.scaleLinear()
       .domain([padding, width - padding])
-      .range([xMin - shapeWidth * 0.2, xMax + shapeWidth * 0.2]);
+      .range([xDomainCenter - xDomainSize / 2, xDomainCenter + xDomainSize / 2]);
 
     const yInverse = d3.scaleLinear()
       .domain([height - padding, padding])
-      .range([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]);
+      .range([yDomainCenter - yDomainSize / 2, yDomainCenter + yDomainSize / 2]);
 
     // 확대/축소 및 반전 적용을 위한 그룹 생성
     const zoomGroup = svg.append('g')
@@ -682,11 +699,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .attr('height', height - 2 * padding)
         .attr('fill', '#f8f9fa');
       
+      // 정사각형 모눈종이를 위한 그리드 간격 계산
+      // x축과 y축에 동일한 간격 적용
+      const gridStep = 1; // 기본 그리드 간격 (실제 좌표 기준)
+      
       // x축 모눈선 그리기
       const xDomain = xScale.domain();
-      const xStep = Math.ceil((xDomain[1] - xDomain[0]) / 20); // 적절한 간격 계산
-      
-      for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += xStep) {
+      for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += gridStep) {
         zoomGroup.append('line')
           .attr('x1', xScale(x))
           .attr('y1', padding)
@@ -695,8 +714,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('stroke', '#dee2e6')
           .attr('stroke-width', 1);
         
-        // 주요 눈금에 숫자 표시
-        if (x % (xStep * 2) === 0) {
+        // 주요 눈금에 숫자 표시 (5의 배수일 때)
+        if (x % 5 === 0) {
           zoomGroup.append('text')
             .attr('x', xScale(x))
             .attr('y', height - padding + 20)
@@ -709,9 +728,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       
       // y축 모눈선 그리기
       const yDomain = yScale.domain();
-      const yStep = Math.ceil((yDomain[1] - yDomain[0]) / 20); // 적절한 간격 계산
-      
-      for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += yStep) {
+      for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += gridStep) {
         zoomGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(y))
@@ -720,8 +737,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('stroke', '#dee2e6')
           .attr('stroke-width', 1);
         
-        // 주요 눈금에 숫자 표시
-        if (y % (yStep * 2) === 0) {
+        // 주요 눈금에 숫자 표시 (5의 배수일 때)
+        if (y % 5 === 0) {
           zoomGroup.append('text')
             .attr('x', padding - 10)
             .attr('y', yScale(y))
