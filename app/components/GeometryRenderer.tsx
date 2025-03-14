@@ -1104,8 +1104,20 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         if (pointIndex === null) return;
         
         const idx = parseInt(pointIndex);
-        const newX = xInverse(event.x);
-        const newY = yInverse(event.y);
+        
+        // SVG 요소의 위치와 크기 정보 가져오기
+        const svgNode = svgRef.current;
+        if (!svgNode) return;
+        
+        const svgRect = svgNode.getBoundingClientRect();
+        
+        // 마우스 이벤트 좌표를 SVG 좌표계로 변환
+        const svgX = event.sourceEvent.clientX - svgRect.left;
+        const svgY = event.sourceEvent.clientY - svgRect.top;
+        
+        // SVG 좌표를 실제 데이터 좌표로 변환
+        const newX = xInverse(svgX);
+        const newY = yInverse(svgY);
         
         // 점 위치 업데이트
         if (onDataChange && idx >= 0 && idx < actualData.points.length) {
