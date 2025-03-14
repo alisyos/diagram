@@ -16,7 +16,9 @@ const defaultGeometryData: GeometryData = {
     { start: 'B', end: 'C', showLength: true, length: 5 },
     { start: 'C', end: 'A', showLength: true, length: 5 }
   ],
-  angles: [],
+  angles: [
+    { vertex: 'A', start: 'C', end: 'B', value: 90, showValue: true }
+  ],
   circles: [],
   curves: []
 };

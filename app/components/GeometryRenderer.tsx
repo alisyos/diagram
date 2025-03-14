@@ -104,13 +104,33 @@ const formatNumber = (num: number): string => {
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const svgContainerRef = useRef<HTMLDivElement>(null);
-  const [showGrid, setShowGrid] = useState(false); // 모눈종이 표시 여부 상태
+  const [showGrid, setShowGrid] = useState(true); // 모눈종이 표시 기본값을 true로 변경
   const [zoomLevel, setZoomLevel] = useState(1); // 확대/축소 레벨 상태
   const [flipX, setFlipX] = useState(false); // 좌우 반전 상태
   const [flipY, setFlipY] = useState(false); // 상하 반전 상태
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 }); // 패닝 오프셋 상태
   const [isDragging, setIsDragging] = useState(false); // 드래그 중인지 여부
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 드래그 시작 위치
+  
+  // 초기 데이터가 없는 경우 사용할 기본 데이터
+  const defaultData: GeometryData = {
+    points: [
+      { label: 'A', x: 0, y: 0, visible: true },
+      { label: 'B', x: 5, y: 0, visible: true },
+      { label: 'C', x: 2.5, y: 4, visible: true }
+    ],
+    lines: [
+      { start: 'A', end: 'B', showLength: true, length: 5 },
+      { start: 'B', end: 'C', showLength: true, length: 5 },
+      { start: 'C', end: 'A', showLength: true, length: 5 }
+    ],
+    angles: [],
+    circles: [],
+    curves: []
+  };
+  
+  // 실제 사용할 데이터 (props로 받은 데이터 또는 기본 데이터)
+  const actualData = data || defaultData;
 
   // 데이터를 보기 좋게 포맷하는 함수
   const formatPoint = (point: Point) => {
@@ -141,7 +161,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handlePointChange = (index: number, field: keyof Point, value: string) => {
     if (!onDataChange) return;
     
-    const newPoints = [...data.points];
+    const newPoints = [...actualData.points];
     if (field === 'label') {
       newPoints[index] = { ...newPoints[index], [field]: value };
     } else {
@@ -151,13 +171,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       }
     }
     
-    onDataChange({ ...data, points: newPoints });
+    onDataChange({ ...actualData, points: newPoints });
   };
 
   const handleLineChange = (index: number, field: keyof Line, value: string | boolean) => {
     if (!onDataChange) return;
     
-    const newLines = [...data.lines];
+    const newLines = [...actualData.lines];
     if (field === 'start' || field === 'end') {
       newLines[index] = { ...newLines[index], [field]: value as string };
     } else if (field === 'length' && typeof value === 'string') {
@@ -169,13 +189,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       newLines[index] = { ...newLines[index], [field]: value as boolean };
     }
     
-    onDataChange({ ...data, lines: newLines });
+    onDataChange({ ...actualData, lines: newLines });
   };
 
   const handleAngleChange = (index: number, field: keyof Angle, value: string | boolean) => {
     if (!onDataChange) return;
     
-    const newAngles = [...data.angles];
+    const newAngles = [...actualData.angles];
     if (field === 'vertex' || field === 'start' || field === 'end') {
       newAngles[index] = { ...newAngles[index], [field]: value as string };
     } else if (field === 'value') {
@@ -187,13 +207,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       newAngles[index] = { ...newAngles[index], [field]: value };
     }
     
-    onDataChange({ ...data, angles: newAngles });
+    onDataChange({ ...actualData, angles: newAngles });
   };
 
   const handleCircleChange = (index: number, field: keyof Circle, value: string | boolean | number) => {
     if (!onDataChange) return;
     
-    const newCircles = [...data.circles];
+    const newCircles = [...actualData.circles];
     if (field === 'center') {
       newCircles[index] = { ...newCircles[index], [field]: value as string };
     } else if (field === 'radius' || field === 'startAngle' || field === 'endAngle') {
@@ -205,7 +225,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       newCircles[index] = { ...newCircles[index], [field]: value as boolean };
     }
     
-    onDataChange({ ...data, circles: newCircles });
+    onDataChange({ ...actualData, circles: newCircles });
   };
 
   // 새로운 점 추가 핸들러
@@ -213,48 +233,48 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     if (!onDataChange) return;
     
     const newPoint: Point = {
-      label: String.fromCharCode(65 + data.points.length), // A, B, C, ... 순서로 라벨 생성
+      label: String.fromCharCode(65 + actualData.points.length), // A, B, C, ... 순서로 라벨 생성
       x: 0.00,
       y: 0.00,
       visible: true // 기본값은 표시
     };
     
     onDataChange({
-      ...data,
-      points: [...data.points, newPoint]
+      ...actualData,
+      points: [...actualData.points, newPoint]
     });
   };
 
   // 새로운 선분 추가 핸들러
   const handleAddLine = () => {
-    if (!onDataChange || data.points.length < 2) return;
+    if (!onDataChange || actualData.points.length < 2) return;
     
     const newLine: Line = {
-      start: data.points[0].label,
-      end: data.points[1].label,
+      start: actualData.points[0].label,
+      end: actualData.points[1].label,
       showLength: false,
       showLengthArc: false
     };
     
     onDataChange({
-      ...data,
-      lines: [...data.lines, newLine]
+      ...actualData,
+      lines: [...actualData.lines, newLine]
     });
   };
 
   // 새로운 원 추가 핸들러
   const handleAddCircle = () => {
-    if (!onDataChange || data.points.length < 1) return;
+    if (!onDataChange || actualData.points.length < 1) return;
     
     const newCircle: Circle = {
-      center: data.points[0].label,
+      center: actualData.points[0].label,
       radius: 1.0,
       showRadius: false
     };
     
     onDataChange({
-      ...data,
-      circles: [...data.circles, newCircle]
+      ...actualData,
+      circles: [...actualData.circles, newCircle]
     });
   };
 
@@ -262,23 +282,23 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleDeletePoint = (index: number) => {
     if (!onDataChange) return;
     
-    const deletedLabel = data.points[index].label;
+    const deletedLabel = actualData.points[index].label;
     
     // 삭제할 점과 연결된 선분, 각도, 원 찾기 및 제거
-    const newLines = data.lines.filter(line => 
+    const newLines = actualData.lines.filter(line => 
       line.start !== deletedLabel && line.end !== deletedLabel
     );
-    const newAngles = data.angles.filter(angle => 
+    const newAngles = actualData.angles.filter(angle => 
       angle.vertex !== deletedLabel && angle.start !== deletedLabel && angle.end !== deletedLabel
     );
-    const newCircles = data.circles.filter(circle => 
+    const newCircles = actualData.circles.filter(circle => 
       circle.center !== deletedLabel
     );
     
-    const newPoints = data.points.filter((_, idx) => idx !== index);
+    const newPoints = actualData.points.filter((_, idx) => idx !== index);
     
     onDataChange({
-      ...data,
+      ...actualData,
       points: newPoints,
       lines: newLines,
       angles: newAngles,
@@ -290,9 +310,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleDeleteLine = (index: number) => {
     if (!onDataChange) return;
     
-    const newLines = data.lines.filter((_, idx) => idx !== index);
+    const newLines = actualData.lines.filter((_, idx) => idx !== index);
     onDataChange({
-      ...data,
+      ...actualData,
       lines: newLines
     });
   };
@@ -301,9 +321,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleDeleteCircle = (index: number) => {
     if (!onDataChange) return;
     
-    const newCircles = data.circles.filter((_, idx) => idx !== index);
+    const newCircles = actualData.circles.filter((_, idx) => idx !== index);
     onDataChange({
-      ...data,
+      ...actualData,
       circles: newCircles
     });
   };
@@ -323,8 +343,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     };
     
     onDataChange({
-      ...data,
-      curves: [...data.curves, newCurve]
+      ...actualData,
+      curves: [...actualData.curves, newCurve]
     });
   };
 
@@ -332,9 +352,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleDeleteCurve = (index: number) => {
     if (!onDataChange) return;
     
-    const newCurves = data.curves.filter((_, idx) => idx !== index);
+    const newCurves = actualData.curves.filter((_, idx) => idx !== index);
     onDataChange({
-      ...data,
+      ...actualData,
       curves: newCurves
     });
   };
@@ -343,7 +363,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleCurveChange = (index: number, field: string, value: string | number) => {
     if (!onDataChange) return;
     
-    const newCurves = [...data.curves];
+    const newCurves = [...actualData.curves];
     
     if (field === 'type') {
       newCurves[index] = { ...newCurves[index], type: value as string };
@@ -362,7 +382,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       }
     }
     
-    onDataChange({ ...data, curves: newCurves });
+    onDataChange({ ...actualData, curves: newCurves });
   };
 
   // 확대 핸들러
@@ -447,26 +467,26 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handlePointVisibilityChange = (index: number, visible: boolean) => {
     if (!onDataChange) return;
     
-    const newPoints = [...data.points];
+    const newPoints = [...actualData.points];
     newPoints[index] = { ...newPoints[index], visible };
     
-    onDataChange({ ...data, points: newPoints });
+    onDataChange({ ...actualData, points: newPoints });
   };
 
   // 점 좌표 미세 조정 핸들러 추가
   const handleAdjustPoint = (index: number, field: 'x' | 'y', amount: number) => {
     if (!onDataChange) return;
     
-    const newPoints = [...data.points];
+    const newPoints = [...actualData.points];
     const currentValue = newPoints[index][field];
     const newValue = Math.round((currentValue + amount) * 100) / 100; // 소수점 둘째 자리까지 반올림
     
     newPoints[index] = { ...newPoints[index], [field]: newValue };
-    onDataChange({ ...data, points: newPoints });
+    onDataChange({ ...actualData, points: newPoints });
   };
 
   useEffect(() => {
-    if (!svgRef.current || !data) return;
+    if (!svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
@@ -476,79 +496,88 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const padding = 80; // 여백 증가
 
     // 도형의 경계 계산
-    const points = data.points;
-    const circles = data.circles || [];
-    const curves = data.curves || [];
+    const points = actualData.points || [];
+    const circles = actualData.circles || [];
+    const curves = actualData.curves || [];
     
-    // 곡선의 범위를 고려하여 경계 계산
-    let xMin = Math.min(...points.map(p => p.x), ...circles.map(c => {
-      const center = points.find(p => p.label === c.center);
-      return center ? center.x - c.radius : Infinity;
-    }));
+    // 항상 기본 경계 설정 (데이터가 비어있어도 도형 영역이 보이도록)
+    let xMin = -10;
+    let xMax = 10;
+    let yMin = -10;
+    let yMax = 10;
     
-    let xMax = Math.max(...points.map(p => p.x), ...circles.map(c => {
-      const center = points.find(p => p.label === c.center);
-      return center ? center.x + c.radius : -Infinity;
-    }));
-    
-    let yMin = Math.min(...points.map(p => p.y), ...circles.map(c => {
-      const center = points.find(p => p.label === c.center);
-      return center ? center.y - c.radius : Infinity;
-    }));
-    
-    let yMax = Math.max(...points.map(p => p.y), ...circles.map(c => {
-      const center = points.find(p => p.label === c.center);
-      return center ? center.y + c.radius : -Infinity;
-    }));
-    
-    // 곡선이 있는 경우 범위 확장
-    if (curves.length > 0) {
-      // 곡선의 x 범위 고려
-      xMin = Math.min(xMin, ...curves.map(c => c.xRange.min));
-      xMax = Math.max(xMax, ...curves.map(c => c.xRange.max));
+    // 데이터가 있는 경우에만 경계 재계산
+    if (points.length > 0 || circles.length > 0 || curves.length > 0) {
+      // 점과 원의 범위 계산
+      if (points.length > 0) {
+        xMin = Math.min(...points.map(p => p.x));
+        xMax = Math.max(...points.map(p => p.x));
+        yMin = Math.min(...points.map(p => p.y));
+        yMax = Math.max(...points.map(p => p.y));
+      }
       
-      // y 범위는 곡선 함수 계산 필요
-      const yValues: number[] = [];
-      
-      curves.forEach(curve => {
-        const { min, max } = curve.xRange;
-        const step = (max - min) / (curve.points || 100);
-        
-        for (let x = min; x <= max; x += step) {
-          if (x <= 0 && curve.type === 'logarithm') continue; // 로그 함수는 x > 0에서만 정의
-          
-          let y = 0;
-          const coef = curve.coefficient || 1;
-          const base = curve.base || Math.E;
-          
-          switch (curve.type) {
-            case 'linear':
-              y = coef * x;
-              break;
-            case 'quadratic':
-              y = coef * x * x;
-              break;
-            case 'logarithm':
-              y = coef * Math.log(x) / Math.log(base);
-              break;
-            case 'exponential':
-              y = coef * Math.pow(base, x);
-              break;
+      // 원의 범위 고려
+      if (circles.length > 0) {
+        circles.forEach(c => {
+          const center = points.find(p => p.label === c.center);
+          if (center) {
+            xMin = Math.min(xMin, center.x - c.radius);
+            xMax = Math.max(xMax, center.x + c.radius);
+            yMin = Math.min(yMin, center.y - c.radius);
+            yMax = Math.max(yMax, center.y + c.radius);
           }
-          
-          yValues.push(y);
-        }
-      });
+        });
+      }
       
-      if (yValues.length > 0) {
-        yMin = Math.min(yMin, ...yValues);
-        yMax = Math.max(yMax, ...yValues);
+      // 곡선이 있는 경우 범위 확장
+      if (curves.length > 0) {
+        // 곡선의 x 범위 고려
+        xMin = Math.min(xMin, ...curves.map(c => c.xRange.min));
+        xMax = Math.max(xMax, ...curves.map(c => c.xRange.max));
+        
+        // y 범위는 곡선 함수 계산 필요
+        const yValues: number[] = [];
+        
+        curves.forEach(curve => {
+          const { min, max } = curve.xRange;
+          const step = (max - min) / (curve.points || 100);
+          
+          for (let x = min; x <= max; x += step) {
+            if (x <= 0 && curve.type === 'logarithm') continue; // 로그 함수는 x > 0에서만 정의
+            
+            let y = 0;
+            const coef = curve.coefficient || 1;
+            const base = curve.base || Math.E;
+            
+            switch (curve.type) {
+              case 'linear':
+                y = coef * x;
+                break;
+              case 'quadratic':
+                y = coef * x * x;
+                break;
+              case 'logarithm':
+                y = coef * Math.log(x) / Math.log(base);
+                break;
+              case 'exponential':
+                y = coef * Math.pow(base, x);
+                break;
+            }
+            
+            yValues.push(y);
+          }
+        });
+        
+        if (yValues.length > 0) {
+          yMin = Math.min(yMin, ...yValues);
+          yMax = Math.max(yMax, ...yValues);
+        }
       }
     }
     
-    // 도형의 크기
-    const shapeWidth = xMax - xMin;
-    const shapeHeight = yMax - yMin;
+    // 도형의 크기 (최소 크기 보장)
+    const shapeWidth = Math.max(xMax - xMin, 20);
+    const shapeHeight = Math.max(yMax - yMin, 20);
 
     // 스케일 조정 (여백을 고려한 중앙 정렬)
     const xScale = d3.scaleLinear()
@@ -811,7 +840,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     });
 
     // 선분 그리기
-    data.lines.forEach(line => {
+    actualData.lines.forEach(line => {
       const startPoint = points.find(p => p.label === line.start);
       const endPoint = points.find(p => p.label === line.end);
 
@@ -884,7 +913,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     });
 
     // 각도 그리기
-    data.angles.forEach(angle => {
+    actualData.angles.forEach(angle => {
       const vertexPoint = points.find(p => p.label === angle.vertex);
       const startPoint = points.find(p => p.label === angle.start);
       const endPoint = points.find(p => p.label === angle.end);
@@ -972,7 +1001,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     });
 
     // 원 그리기
-    data.circles.forEach(circle => {
+    actualData.circles.forEach(circle => {
       const centerPoint = points.find(p => p.label === circle.center);
 
       if (centerPoint) {
@@ -1079,8 +1108,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         const newY = yInverse(event.y);
         
         // 점 위치 업데이트
-        if (onDataChange && idx >= 0 && idx < data.points.length) {
-          const newPoints = [...data.points];
+        if (onDataChange && idx >= 0 && idx < actualData.points.length) {
+          const newPoints = [...actualData.points];
           newPoints[idx] = {
             ...newPoints[idx],
             x: newX,
@@ -1088,7 +1117,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           };
           
           onDataChange({
-            ...data,
+            ...actualData,
             points: newPoints
           });
         }
@@ -1125,7 +1154,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         }
       );
     });
-  }, [data, onDataChange, showGrid, zoomLevel, flipX, flipY, panOffset]); // panOffset 의존성 추가
+  }, [actualData, onDataChange, showGrid, zoomLevel, flipX, flipY, panOffset]); // panOffset 의존성 추가
 
   // 컴포넌트 마운트 시 커서 스타일 설정
   useEffect(() => {
@@ -1221,7 +1250,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {data.points.map((point, idx) => (
+            {actualData.points.map((point, idx) => (
               <div key={idx} className="bg-white p-2 rounded grid grid-cols-6 gap-2 items-center">
                 <input
                   type="text"
@@ -1272,13 +1301,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             <button
               onClick={handleAddLine}
               className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-              disabled={data.points.length < 2}
+              disabled={actualData.points.length < 2}
             >
               선분 추가
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {data.lines.map((line, idx) => (
+            {actualData.lines.map((line, idx) => (
               <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
                 <div className="grid grid-cols-6 gap-2 items-center">
                   <input
@@ -1334,76 +1363,109 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           </div>
         </div>
         
-        {data.angles.length > 0 && (
-          <div>
-            <h3 className="font-bold mb-1">각도:</h3>
-            <div className="grid grid-cols-1 gap-2">
-              {data.angles.map((angle, idx) => (
-                <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
-                  <div className="grid grid-cols-6 gap-2 items-center">
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">각도:</h3>
+            <button
+              onClick={() => {
+                if (!onDataChange || actualData.points.length < 3) return;
+                
+                const newAngle: Angle = {
+                  vertex: actualData.points[0].label,
+                  start: actualData.points[1].label,
+                  end: actualData.points[2].label,
+                  value: 90,
+                  showValue: true
+                };
+                
+                onDataChange({
+                  ...actualData,
+                  angles: [...actualData.angles, newAngle]
+                });
+              }}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+              disabled={actualData.points.length < 3}
+            >
+              각도 추가
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {actualData.angles.map((angle, idx) => (
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-6 gap-2 items-center">
+                  <input
+                    type="text"
+                    value={angle.vertex}
+                    onChange={(e) => handleAngleChange(idx, 'vertex', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
+                    placeholder="꼭지점"
+                  />
+                  <input
+                    type="text"
+                    value={angle.start}
+                    onChange={(e) => handleAngleChange(idx, 'start', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
+                    placeholder="시작점"
+                  />
+                  <input
+                    type="text"
+                    value={angle.end}
+                    onChange={(e) => handleAngleChange(idx, 'end', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
+                    placeholder="끝점"
+                  />
+                  <input
+                    type="number"
+                    value={angle.value}
+                    onChange={(e) => handleAngleChange(idx, 'value', e.target.value)}
+                    step="1"
+                    className="w-full p-1 border rounded"
+                    placeholder="각도"
+                  />
+                  <div className="flex items-center">
                     <input
-                      type="text"
-                      value={angle.vertex}
-                      onChange={(e) => handleAngleChange(idx, 'vertex', e.target.value)}
-                      className="w-full p-1 border rounded text-center"
-                      placeholder="꼭지점"
+                      type="checkbox"
+                      checked={angle.showValue || false}
+                      onChange={(e) => handleAngleChange(idx, 'showValue', e.target.checked)}
+                      className="mr-2"
                     />
-                    <input
-                      type="text"
-                      value={angle.start}
-                      onChange={(e) => handleAngleChange(idx, 'start', e.target.value)}
-                      className="w-full p-1 border rounded text-center"
-                      placeholder="시작점"
-                    />
-                    <input
-                      type="text"
-                      value={angle.end}
-                      onChange={(e) => handleAngleChange(idx, 'end', e.target.value)}
-                      className="w-full p-1 border rounded text-center"
-                      placeholder="끝점"
-                    />
+                    <span className="text-xs">표시</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (!onDataChange) return;
+                      
+                      const newAngles = actualData.angles.filter((_, i) => i !== idx);
+                      onDataChange({
+                        ...actualData,
+                        angles: newAngles
+                      });
+                    }}
+                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 items-center mt-1">
+                  <div className="flex items-center">
+                    <span className="text-xs mr-2">회전:</span>
                     <input
                       type="number"
-                      value={angle.value}
-                      onChange={(e) => handleAngleChange(idx, 'value', e.target.value)}
-                      step="1"
+                      value={angle.rotation || 0}
+                      onChange={(e) => handleAngleChange(idx, 'rotation', e.target.value)}
+                      step="5"
                       className="w-full p-1 border rounded"
-                      placeholder="각도"
+                      placeholder="회전 (도)"
                     />
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={angle.showValue || false}
-                        onChange={(e) => handleAngleChange(idx, 'showValue', e.target.checked)}
-                        className="mr-2"
-                      />
-                      <span className="text-xs">표시</span>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {formatAngle(angle)}
-                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 items-center mt-1">
-                    <div className="flex items-center">
-                      <span className="text-xs mr-2">회전:</span>
-                      <input
-                        type="number"
-                        value={angle.rotation || 0}
-                        onChange={(e) => handleAngleChange(idx, 'rotation', e.target.value)}
-                        step="5"
-                        className="w-full p-1 border rounded"
-                        placeholder="회전 (도)"
-                      />
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      회전 각도: {angle.rotation || 0}°
-                    </span>
-                  </div>
+                  <span className="text-xs text-gray-500">
+                    회전 각도: {angle.rotation || 0}°
+                  </span>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
         
         <div>
           <div className="flex justify-between items-center mb-2">
@@ -1411,13 +1473,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             <button
               onClick={handleAddCircle}
               className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-              disabled={data.points.length < 1}
+              disabled={actualData.points.length < 1}
             >
               원 추가
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {data.circles.map((circle, idx) => (
+            {actualData.circles.map((circle, idx) => (
               <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
                 <div className="grid grid-cols-3 gap-2 items-center">
                   <input
@@ -1499,7 +1561,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </button>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {data.curves.map((curve, idx) => (
+            {actualData.curves.map((curve, idx) => (
               <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
                 <div className="grid grid-cols-6 gap-2 items-center">
                   <select
