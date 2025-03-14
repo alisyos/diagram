@@ -102,10 +102,14 @@ const formatNumber = (num: number): string => {
 
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const svgContainerRef = useRef<HTMLDivElement>(null);
   const [showGrid, setShowGrid] = useState(false); // 모눈종이 표시 여부 상태
   const [zoomLevel, setZoomLevel] = useState(1); // 확대/축소 레벨 상태
   const [flipX, setFlipX] = useState(false); // 좌우 반전 상태
   const [flipY, setFlipY] = useState(false); // 상하 반전 상태
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 }); // 패닝 오프셋 상태
+  const [isDragging, setIsDragging] = useState(false); // 드래그 중인지 여부
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 드래그 시작 위치
 
   // 데이터를 보기 좋게 포맷하는 함수
   const formatPoint = (point: Point) => {
@@ -372,6 +376,69 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   // 확대/축소 초기화 핸들러
   const handleResetZoom = () => {
     setZoomLevel(1);
+    setPanOffset({ x: 0, y: 0 }); // 패닝도 초기화
+  };
+
+  // 패닝 시작 핸들러
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) { // 좌클릭만 처리
+      setIsDragging(true);
+      setDragStart({ x: e.clientX, y: e.clientY });
+      
+      // 커서 스타일 변경
+      if (svgContainerRef.current) {
+        svgContainerRef.current.style.cursor = 'grabbing';
+      }
+    }
+  };
+
+  // 패닝 중 핸들러
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      
+      setPanOffset(prev => ({
+        x: prev.x + dx,
+        y: prev.y + dy
+      }));
+      
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+  };
+
+  // 패닝 종료 핸들러
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    
+    // 커서 스타일 복원
+    if (svgContainerRef.current) {
+      svgContainerRef.current.style.cursor = 'grab';
+    }
+  };
+
+  // 마우스가 영역을 벗어났을 때 핸들러
+  const handleMouseLeave = () => {
+    if (isDragging) {
+      setIsDragging(false);
+      
+      // 커서 스타일 복원
+      if (svgContainerRef.current) {
+        svgContainerRef.current.style.cursor = 'grab';
+      }
+    }
+  };
+
+  // 마우스 휠 이벤트 핸들러 (확대/축소)
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    
+    // 휠 위로 스크롤 시 확대, 아래로 스크롤 시 축소
+    if (e.deltaY < 0) {
+      setZoomLevel(prev => Math.min(prev + 0.1, 3)); // 최대 3배까지 확대
+    } else {
+      setZoomLevel(prev => Math.max(prev - 0.1, 0.5)); // 최소 0.5배까지 축소
+    }
   };
 
   useEffect(() => {
@@ -486,6 +553,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 확대/축소 및 반전을 중심점 기준으로 적용
         let transform = '';
+        
+        // 패닝 오프셋 적용
+        transform += `translate(${panOffset.x}, ${panOffset.y}) `;
         
         // 먼저 중심으로 이동
         transform += `translate(${centerX}, ${centerY}) `;
@@ -1028,12 +1098,19 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         }
       );
     });
-  }, [data, onDataChange, showGrid, zoomLevel, flipX, flipY]); // flipX, flipY 의존성 추가
+  }, [data, onDataChange, showGrid, zoomLevel, flipX, flipY, panOffset]); // panOffset 의존성 추가
+
+  // 컴포넌트 마운트 시 커서 스타일 설정
+  useEffect(() => {
+    if (svgContainerRef.current) {
+      svgContainerRef.current.style.cursor = 'grab';
+    }
+  }, []);
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-4 w-full">
-      <div className="w-full md:w-1/2 overflow-auto border rounded-lg">
-        <div className="flex justify-between p-2 bg-gray-50 border-b">
+      <div className="w-full md:w-1/2 border rounded-lg flex flex-col">
+        <div className="flex justify-between p-2 bg-gray-50 border-b sticky top-0 z-10">
           <div className="flex items-center space-x-2">
             <button
               onClick={handleZoomOut}
@@ -1085,14 +1162,24 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </label>
           </div>
         </div>
-        <svg
-          ref={svgRef}
-          width="800"
-          height="600"
-          viewBox="0 0 800 600"
-          preserveAspectRatio="xMidYMid meet"
-          className="mx-auto"
-        />
+        <div 
+          ref={svgContainerRef}
+          className="overflow-auto h-[600px]"
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseLeave}
+          onWheel={handleWheel}
+        >
+          <svg
+            ref={svgRef}
+            width="800"
+            height="600"
+            viewBox="0 0 800 600"
+            preserveAspectRatio="xMidYMid meet"
+            className="mx-auto"
+          />
+        </div>
       </div>
       
       <div className="w-full md:w-1/2 p-4 bg-gray-50 rounded-lg shadow-sm space-y-4 text-sm font-mono max-h-[600px] overflow-y-auto">
