@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
 interface Point {
@@ -92,6 +92,7 @@ const generateCurvePoints = (curve: Curve): Point[] => {
 
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const svgRef = useRef<SVGSVGElement>(null);
+  const [showGrid, setShowGrid] = useState(false); // 모눈종이 표시 여부 상태
 
   // 데이터를 보기 좋게 포맷하는 함수
   const formatPoint = (point: Point) => {
@@ -401,6 +402,96 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       .domain([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]) // 여백 비율 증가
       .range([height - padding, padding]);
 
+    // 역 스케일 함수 (SVG 좌표 -> 실제 좌표)
+    const xInverse = d3.scaleLinear()
+      .domain([padding, width - padding])
+      .range([xMin - shapeWidth * 0.2, xMax + shapeWidth * 0.2]);
+
+    const yInverse = d3.scaleLinear()
+      .domain([height - padding, padding])
+      .range([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]);
+
+    // 모눈종이 그리기 (showGrid가 true일 때만)
+    if (showGrid) {
+      // 배경 사각형 추가
+      svg.append('rect')
+        .attr('x', padding)
+        .attr('y', padding)
+        .attr('width', width - 2 * padding)
+        .attr('height', height - 2 * padding)
+        .attr('fill', '#f8f9fa');
+      
+      // x축 모눈선 그리기
+      const xDomain = xScale.domain();
+      const xStep = Math.ceil((xDomain[1] - xDomain[0]) / 20); // 적절한 간격 계산
+      
+      for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += xStep) {
+        svg.append('line')
+          .attr('x1', xScale(x))
+          .attr('y1', padding)
+          .attr('x2', xScale(x))
+          .attr('y2', height - padding)
+          .attr('stroke', '#dee2e6')
+          .attr('stroke-width', 1);
+        
+        // 주요 눈금에 숫자 표시
+        if (x % (xStep * 2) === 0) {
+          svg.append('text')
+            .attr('x', xScale(x))
+            .attr('y', height - padding + 20)
+            .attr('text-anchor', 'middle')
+            .attr('font-size', '10px')
+            .attr('fill', '#6c757d')
+            .text(x.toString());
+        }
+      }
+      
+      // y축 모눈선 그리기
+      const yDomain = yScale.domain();
+      const yStep = Math.ceil((yDomain[1] - yDomain[0]) / 20); // 적절한 간격 계산
+      
+      for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += yStep) {
+        svg.append('line')
+          .attr('x1', padding)
+          .attr('y1', yScale(y))
+          .attr('x2', width - padding)
+          .attr('y2', yScale(y))
+          .attr('stroke', '#dee2e6')
+          .attr('stroke-width', 1);
+        
+        // 주요 눈금에 숫자 표시
+        if (y % (yStep * 2) === 0) {
+          svg.append('text')
+            .attr('x', padding - 10)
+            .attr('y', yScale(y))
+            .attr('text-anchor', 'end')
+            .attr('dominant-baseline', 'middle')
+            .attr('font-size', '10px')
+            .attr('fill', '#6c757d')
+            .text(y.toString());
+        }
+      }
+      
+      // 원점 강조 (0, 0)
+      if (xDomain[0] <= 0 && xDomain[1] >= 0 && yDomain[0] <= 0 && yDomain[1] >= 0) {
+        svg.append('line')
+          .attr('x1', xScale(0))
+          .attr('y1', padding)
+          .attr('x2', xScale(0))
+          .attr('y2', height - padding)
+          .attr('stroke', '#adb5bd')
+          .attr('stroke-width', 1.5);
+        
+        svg.append('line')
+          .attr('x1', padding)
+          .attr('y1', yScale(0))
+          .attr('x2', width - padding)
+          .attr('y2', yScale(0))
+          .attr('stroke', '#adb5bd')
+          .attr('stroke-width', 1.5);
+      }
+    }
+
     // 곡선이 있는 경우에만 축 그리기
     if (curves.length > 0) {
       const xAxis = d3.axisBottom(xScale);
@@ -644,25 +735,76 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       }
     });
 
-    // 점 그리기
-    points.forEach(point => {
+    // 드래그 이벤트 핸들러
+    const dragHandler = d3.drag<SVGCircleElement, unknown>()
+      .on('start', function(event) {
+        d3.select(this).attr('fill', '#ff6b6b'); // 드래그 시작 시 색상 변경
+      })
+      .on('drag', function(event, d) {
+        const pointIndex = d3.select(this).attr('data-index');
+        if (pointIndex === null) return;
+        
+        const idx = parseInt(pointIndex);
+        const newX = xInverse(event.x);
+        const newY = yInverse(event.y);
+        
+        // 점 위치 업데이트
+        if (onDataChange && idx >= 0 && idx < data.points.length) {
+          const newPoints = [...data.points];
+          newPoints[idx] = {
+            ...newPoints[idx],
+            x: newX,
+            y: newY
+          };
+          
+          onDataChange({
+            ...data,
+            points: newPoints
+          });
+        }
+      })
+      .on('end', function() {
+        d3.select(this).attr('fill', '#4dabf7'); // 드래그 종료 시 원래 색상으로 복원
+      });
+
+    // 점 그리기 (드래그 기능 추가)
+    points.forEach((point, index) => {
+      // 점 그리기
       svg.append('circle')
         .attr('cx', xScale(point.x))
         .attr('cy', yScale(point.y))
         .attr('r', 5)
-        .attr('fill', '#4dabf7');
+        .attr('fill', '#4dabf7')
+        .attr('cursor', 'move') // 커서 스타일 변경
+        .attr('data-index', index.toString()) // 인덱스 저장
+        .call(dragHandler as any); // 드래그 이벤트 연결
 
+      // 라벨 그리기
       svg.append('text')
         .attr('x', xScale(point.x) + 10)
         .attr('y', yScale(point.y) - 10)
         .attr('font-size', '14px')
         .text(point.label);
     });
-  }, [data]);
+  }, [data, onDataChange, showGrid]); // showGrid 의존성 추가
 
   return (
     <div className="flex flex-col items-center space-y-4">
       <div className="w-full overflow-auto border rounded-lg">
+        <div className="flex justify-end p-2 bg-gray-50 border-b">
+          <div className="flex items-center">
+            <label className="inline-flex items-center cursor-pointer mr-4">
+              <input
+                type="checkbox"
+                checked={showGrid}
+                onChange={() => setShowGrid(!showGrid)}
+                className="sr-only peer"
+              />
+              <div className="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              <span className="ms-3 text-sm font-medium text-gray-500">모눈종이 표시</span>
+            </label>
+          </div>
+        </div>
         <svg
           ref={svgRef}
           width="800"
