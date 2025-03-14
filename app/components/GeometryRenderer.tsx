@@ -93,6 +93,7 @@ const generateCurvePoints = (curve: Curve): Point[] => {
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [showGrid, setShowGrid] = useState(false); // 모눈종이 표시 여부 상태
+  const [zoomLevel, setZoomLevel] = useState(1); // 확대/축소 레벨 상태
 
   // 데이터를 보기 좋게 포맷하는 함수
   const formatPoint = (point: Point) => {
@@ -308,6 +309,21 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     onDataChange({ ...data, curves: newCurves });
   };
 
+  // 확대 핸들러
+  const handleZoomIn = () => {
+    setZoomLevel(prev => Math.min(prev + 0.2, 3)); // 최대 3배까지 확대
+  };
+
+  // 축소 핸들러
+  const handleZoomOut = () => {
+    setZoomLevel(prev => Math.max(prev - 0.2, 0.5)); // 최소 0.5배까지 축소
+  };
+
+  // 확대/축소 초기화 핸들러
+  const handleResetZoom = () => {
+    setZoomLevel(1);
+  };
+
   useEffect(() => {
     if (!svgRef.current || !data) return;
 
@@ -411,10 +427,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       .domain([height - padding, padding])
       .range([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]);
 
+    // 확대/축소 적용을 위한 그룹 생성
+    const zoomGroup = svg.append('g')
+      .attr('transform', `scale(${zoomLevel}) translate(${(width * (1 - zoomLevel)) / (2 * zoomLevel)}, ${(height * (1 - zoomLevel)) / (2 * zoomLevel)})`);
+
     // 모눈종이 그리기 (showGrid가 true일 때만)
     if (showGrid) {
       // 배경 사각형 추가
-      svg.append('rect')
+      zoomGroup.append('rect')
         .attr('x', padding)
         .attr('y', padding)
         .attr('width', width - 2 * padding)
@@ -426,7 +446,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const xStep = Math.ceil((xDomain[1] - xDomain[0]) / 20); // 적절한 간격 계산
       
       for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += xStep) {
-        svg.append('line')
+        zoomGroup.append('line')
           .attr('x1', xScale(x))
           .attr('y1', padding)
           .attr('x2', xScale(x))
@@ -436,7 +456,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 주요 눈금에 숫자 표시
         if (x % (xStep * 2) === 0) {
-          svg.append('text')
+          zoomGroup.append('text')
             .attr('x', xScale(x))
             .attr('y', height - padding + 20)
             .attr('text-anchor', 'middle')
@@ -451,7 +471,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const yStep = Math.ceil((yDomain[1] - yDomain[0]) / 20); // 적절한 간격 계산
       
       for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += yStep) {
-        svg.append('line')
+        zoomGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(y))
           .attr('x2', width - padding)
@@ -461,7 +481,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 주요 눈금에 숫자 표시
         if (y % (yStep * 2) === 0) {
-          svg.append('text')
+          zoomGroup.append('text')
             .attr('x', padding - 10)
             .attr('y', yScale(y))
             .attr('text-anchor', 'end')
@@ -474,7 +494,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       
       // 원점 강조 (0, 0)
       if (xDomain[0] <= 0 && xDomain[1] >= 0 && yDomain[0] <= 0 && yDomain[1] >= 0) {
-        svg.append('line')
+        zoomGroup.append('line')
           .attr('x1', xScale(0))
           .attr('y1', padding)
           .attr('x2', xScale(0))
@@ -482,7 +502,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('stroke', '#adb5bd')
           .attr('stroke-width', 1.5);
         
-        svg.append('line')
+        zoomGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(0))
           .attr('x2', width - padding)
@@ -497,11 +517,11 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const xAxis = d3.axisBottom(xScale);
       const yAxis = d3.axisLeft(yScale);
       
-      svg.append('g')
+      zoomGroup.append('g')
         .attr('transform', `translate(0, ${yScale(0)})`)
         .call(xAxis);
       
-      svg.append('g')
+      zoomGroup.append('g')
         .attr('transform', `translate(${xScale(0)}, 0)`)
         .call(yAxis);
     }
@@ -542,7 +562,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .y(d => yScale(d[1]))
         .curve(d3.curveMonotoneX);
       
-      svg.append('path')
+      zoomGroup.append('path')
         .datum(points)
         .attr('fill', 'none')
         .attr('stroke', curve.type === 'linear' ? '#ff6b6b' : '#4dabf7')
@@ -570,7 +590,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           break;
       }
       
-      svg.append('text')
+      zoomGroup.append('text')
         .attr('x', xScale(lastPoint[0]))
         .attr('y', yScale(lastPoint[1]) - 10)
         .attr('text-anchor', 'end')
@@ -584,7 +604,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const endPoint = points.find(p => p.label === line.end);
 
       if (startPoint && endPoint) {
-        svg.append('line')
+        zoomGroup.append('line')
           .attr('x1', xScale(startPoint.x))
           .attr('y1', yScale(startPoint.y))
           .attr('x2', xScale(endPoint.x))
@@ -597,7 +617,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const midX = (startPoint.x + endPoint.x) / 2;
           const midY = (startPoint.y + endPoint.y) / 2;
           
-          svg.append('text')
+          zoomGroup.append('text')
             .attr('x', xScale(midX))
             .attr('y', yScale(midY) - 10)
             .attr('text-anchor', 'middle')
@@ -669,7 +689,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .endAngle(adjustedEndAngle)
             .context(null);
           
-          svg.append('path')
+          zoomGroup.append('path')
             .attr('d', arcGenerator({} as any))
             .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
             .attr('fill', 'none')
@@ -684,7 +704,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const screenX = xScale(vertexPoint.x) + Math.cos(midAngle) * labelRadius;
           const screenY = yScale(vertexPoint.y) + Math.sin(midAngle) * labelRadius;
           
-          svg.append('text')
+          zoomGroup.append('text')
             .attr('x', screenX)
             .attr('y', screenY)
             .attr('text-anchor', 'middle')
@@ -701,7 +721,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const centerPoint = points.find(p => p.label === circle.center);
 
       if (centerPoint) {
-        svg.append('circle')
+        zoomGroup.append('circle')
           .attr('cx', xScale(centerPoint.x))
           .attr('cy', yScale(centerPoint.y))
           .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
@@ -715,7 +735,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const radiusEndY = centerPoint.y;
           
           // 반지름 선 그리기
-          svg.append('line')
+          zoomGroup.append('line')
             .attr('x1', xScale(centerPoint.x))
             .attr('y1', yScale(centerPoint.y))
             .attr('x2', xScale(radiusEndX))
@@ -725,7 +745,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('stroke-dasharray', '4');
           
           // 반지름 값 표시
-          svg.append('text')
+          zoomGroup.append('text')
             .attr('x', xScale((centerPoint.x + radiusEndX) / 2))
             .attr('y', yScale(radiusEndY) - 10)
             .attr('text-anchor', 'middle')
@@ -770,7 +790,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     // 점 그리기 (드래그 기능 추가)
     points.forEach((point, index) => {
       // 점 그리기
-      svg.append('circle')
+      zoomGroup.append('circle')
         .attr('cx', xScale(point.x))
         .attr('cy', yScale(point.y))
         .attr('r', 5)
@@ -780,18 +800,42 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .call(dragHandler as any); // 드래그 이벤트 연결
 
       // 라벨 그리기
-      svg.append('text')
+      zoomGroup.append('text')
         .attr('x', xScale(point.x) + 10)
         .attr('y', yScale(point.y) - 10)
         .attr('font-size', '14px')
         .text(point.label);
     });
-  }, [data, onDataChange, showGrid]); // showGrid 의존성 추가
+  }, [data, onDataChange, showGrid, zoomLevel]); // zoomLevel 의존성 추가
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-4 w-full">
       <div className="w-full md:w-1/2 overflow-auto border rounded-lg">
-        <div className="flex justify-end p-2 bg-gray-50 border-b">
+        <div className="flex justify-between p-2 bg-gray-50 border-b">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleZoomOut}
+              className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded-full text-gray-700 font-bold"
+              title="축소"
+            >
+              -
+            </button>
+            <button
+              onClick={handleResetZoom}
+              className="px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-700"
+              title="확대/축소 초기화"
+            >
+              {Math.round(zoomLevel * 100)}%
+            </button>
+            <button
+              onClick={handleZoomIn}
+              className="w-8 h-8 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded-full text-gray-700 font-bold"
+              title="확대"
+            >
+              +
+            </button>
+          </div>
+          
           <div className="flex items-center">
             <label className="inline-flex items-center cursor-pointer mr-4">
               <input
