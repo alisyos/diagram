@@ -5,6 +5,7 @@ interface Point {
   x: number;
   y: number;
   label: string;
+  visible?: boolean; // 점 표시 여부
 }
 
 interface Line {
@@ -214,7 +215,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const newPoint: Point = {
       label: String.fromCharCode(65 + data.points.length), // A, B, C, ... 순서로 라벨 생성
       x: 0.00,
-      y: 0.00
+      y: 0.00,
+      visible: true // 기본값은 표시
     };
     
     onDataChange({
@@ -439,6 +441,16 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     } else {
       setZoomLevel(prev => Math.max(prev - 0.1, 0.5)); // 최소 0.5배까지 축소
     }
+  };
+
+  // 점 표시 여부 변경 핸들러 추가
+  const handlePointVisibilityChange = (index: number, visible: boolean) => {
+    if (!onDataChange) return;
+    
+    const newPoints = [...data.points];
+    newPoints[index] = { ...newPoints[index], visible };
+    
+    onDataChange({ ...data, points: newPoints });
   };
 
   useEffect(() => {
@@ -1075,6 +1087,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
 
     // 점 그리기 (드래그 기능 추가)
     points.forEach((point, index) => {
+      // visible이 false인 경우 표시하지 않음
+      if (point.visible === false) return;
+      
       // 점 그리기
       zoomGroup.append('circle')
         .attr('cx', xScale(point.x))
@@ -1195,7 +1210,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           </div>
           <div className="grid grid-cols-1 gap-2">
             {data.points.map((point, idx) => (
-              <div key={idx} className="bg-white p-2 rounded grid grid-cols-5 gap-2 items-center">
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-6 gap-2 items-center">
                 <input
                   type="text"
                   value={point.label}
@@ -1216,6 +1231,15 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                   step="0.01"
                   className="w-full p-1 border rounded"
                 />
+                <div className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={point.visible !== false}
+                    onChange={(e) => handlePointVisibilityChange(idx, e.target.checked)}
+                    className="mr-1"
+                  />
+                  <span className="text-xs">표시</span>
+                </div>
                 <span className="text-xs text-gray-500">
                   {formatPoint(point)}
                 </span>
