@@ -2,6 +2,7 @@ export interface Point {
   x: number;
   y: number;
   label: string;
+  visible?: boolean;
 }
 
 export interface Line {
@@ -9,6 +10,7 @@ export interface Line {
   end: string;
   length?: number;
   showLength?: boolean;
+  showLengthArc?: boolean;
 }
 
 export interface Angle {

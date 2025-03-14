@@ -453,6 +453,18 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     onDataChange({ ...data, points: newPoints });
   };
 
+  // 점 좌표 미세 조정 핸들러 추가
+  const handleAdjustPoint = (index: number, field: 'x' | 'y', amount: number) => {
+    if (!onDataChange) return;
+    
+    const newPoints = [...data.points];
+    const currentValue = newPoints[index][field];
+    const newValue = Math.round((currentValue + amount) * 100) / 100; // 소수점 둘째 자리까지 반올림
+    
+    newPoints[index] = { ...newPoints[index], [field]: newValue };
+    onDataChange({ ...data, points: newPoints });
+  };
+
   useEffect(() => {
     if (!svgRef.current || !data) return;
 

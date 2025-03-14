@@ -4,11 +4,28 @@ import { useState, useCallback } from 'react';
 import GeometryRenderer from './components/GeometryRenderer';
 import type { GeometryData } from './types';
 
+// 기본 도형 데이터 정의
+const defaultGeometryData: GeometryData = {
+  points: [
+    { label: 'A', x: 0, y: 0, visible: true },
+    { label: 'B', x: 5, y: 0, visible: true },
+    { label: 'C', x: 2.5, y: 4, visible: true }
+  ],
+  lines: [
+    { start: 'A', end: 'B', showLength: true, length: 5 },
+    { start: 'B', end: 'C', showLength: true, length: 5 },
+    { start: 'C', end: 'A', showLength: true, length: 5 }
+  ],
+  angles: [],
+  circles: [],
+  curves: []
+};
+
 export default function Home() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [analyzedText, setAnalyzedText] = useState<string>('');
   const [userText, setUserText] = useState<string>('');
-  const [geometryData, setGeometryData] = useState<GeometryData | null>(null);
+  const [geometryData, setGeometryData] = useState<GeometryData>(defaultGeometryData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -207,16 +224,14 @@ export default function Home() {
           </div>
         )}
 
-        {/* 생성된 도형 */}
-        {geometryData && (
-          <div className="w-full">
-            <h2 className="text-xl font-bold mb-4">생성된 도형</h2>
-            <GeometryRenderer 
-              data={geometryData} 
-              onDataChange={handleDataChange}
-            />
-          </div>
-        )}
+        {/* 생성된 도형 - 항상 표시되도록 수정 */}
+        <div className="w-full">
+          <h2 className="text-xl font-bold mb-4">생성된 도형</h2>
+          <GeometryRenderer 
+            data={geometryData} 
+            onDataChange={handleDataChange}
+          />
+        </div>
       </div>
     </main>
   );
