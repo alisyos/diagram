@@ -95,10 +95,17 @@ const generateCurvePoints = (curve: Curve): Point[] => {
   return points;
 }
 
+// 길이 값 표시 형식을 수정하는 함수 추가
+const formatNumber = (num: number): string => {
+  return Number.isInteger(num) ? num.toString() : num.toFixed(2);
+};
+
 const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const svgRef = useRef<SVGSVGElement>(null);
   const [showGrid, setShowGrid] = useState(false); // 모눈종이 표시 여부 상태
   const [zoomLevel, setZoomLevel] = useState(1); // 확대/축소 레벨 상태
+  const [flipX, setFlipX] = useState(false); // 좌우 반전 상태
+  const [flipY, setFlipY] = useState(false); // 상하 반전 상태
 
   // 데이터를 보기 좋게 포맷하는 함수
   const formatPoint = (point: Point) => {
@@ -106,7 +113,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   };
 
   const formatLine = (line: Line) => {
-    let text = `${line.start}${line.end}: ${line.length ? line.length.toFixed(2) : '길이 미표시'}`;
+    let text = `${line.start}${line.end}: ${line.length ? formatNumber(line.length) : '길이 미표시'}`;
     if (line.showLengthArc) {
       text += ' (호 표시)';
     }
@@ -470,9 +477,77 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       .domain([height - padding, padding])
       .range([yMin - shapeHeight * 0.2, yMax + shapeHeight * 0.2]);
 
-    // 확대/축소 적용을 위한 그룹 생성
+    // 확대/축소 및 반전 적용을 위한 그룹 생성
     const zoomGroup = svg.append('g')
-      .attr('transform', `scale(${zoomLevel}) translate(${(width * (1 - zoomLevel)) / (2 * zoomLevel)}, ${(height * (1 - zoomLevel)) / (2 * zoomLevel)})`);
+      .attr('transform', function() {
+        // SVG의 중심점 계산
+        const centerX = width / 2;
+        const centerY = height / 2;
+        
+        // 확대/축소 및 반전을 중심점 기준으로 적용
+        let transform = '';
+        
+        // 먼저 중심으로 이동
+        transform += `translate(${centerX}, ${centerY}) `;
+        
+        // 확대/축소 및 반전 적용
+        transform += `scale(${zoomLevel * (flipX ? -1 : 1)}, ${zoomLevel * (flipY ? -1 : 1)}) `;
+        
+        // 다시 원래 위치로 이동
+        transform += `translate(${-centerX}, ${-centerY}) `;
+        
+        // 확대/축소에 따른 추가 이동 (중심 유지를 위해)
+        const zoomOffsetX = (width * (1 - zoomLevel)) / (2 * zoomLevel);
+        const zoomOffsetY = (height * (1 - zoomLevel)) / (2 * zoomLevel);
+        transform += `translate(${zoomOffsetX}, ${zoomOffsetY})`;
+        
+        return transform;
+      });
+
+    // 텍스트 반전 방지를 위한 함수 정의
+    const createNonFlippedText = (
+      parent: d3.Selection<SVGGElement, unknown, null, undefined>,
+      x: number, 
+      y: number, 
+      text: string, 
+      options: {
+        fontSize?: string,
+        fill?: string,
+        textAnchor?: string,
+        dominantBaseline?: string
+      } = {}
+    ) => {
+      const {
+        fontSize = '12px',
+        fill = '#000',
+        textAnchor = 'middle',
+        dominantBaseline = 'middle'
+      } = options;
+      
+      const textGroup = parent.append('g')
+        .attr('transform', function() {
+          // 텍스트 위치 계산
+          const textX = xScale(x);
+          const textY = yScale(y);
+          
+          // 텍스트 반전 방지를 위한 변환
+          let transform = `translate(${textX}, ${textY})`;
+          
+          // 반전이 적용된 경우 텍스트에 대해 반전을 상쇄
+          if (flipX || flipY) {
+            transform += ` scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`;
+          }
+          
+          return transform;
+        });
+      
+      return textGroup.append('text')
+        .attr('text-anchor', textAnchor)
+        .attr('dominant-baseline', dominantBaseline)
+        .attr('font-size', fontSize)
+        .attr('fill', fill)
+        .text(text);
+    };
 
     // 모눈종이 그리기 (showGrid가 true일 때만)
     if (showGrid) {
@@ -661,12 +736,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const midX = (startPoint.x + endPoint.x) / 2;
           const midY = (startPoint.y + endPoint.y) / 2;
           
-          zoomGroup.append('text')
-            .attr('x', xScale(midX))
-            .attr('y', yScale(midY) - 10)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '12px')
-            .text(`${line.length.toFixed(2)}`);
+          createNonFlippedText(zoomGroup, midX, midY - 0.2, formatNumber(line.length));
         }
         
         // 길이를 호로 표시
@@ -708,14 +778,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('stroke-dasharray', '4');
           
           // 길이 값 표시 (제어점 위치에)
-          zoomGroup.append('text')
-            .attr('x', xScale(controlX))
-            .attr('y', yScale(controlY) - 5)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .attr('font-size', '12px')
-            .attr('fill', '#495057')
-            .text(`${line.length.toFixed(2)}`);
+          createNonFlippedText(
+            zoomGroup, 
+            controlX, 
+            controlY - 0.1, 
+            formatNumber(line.length), 
+            { fill: '#495057' }
+          );
         }
       }
     });
@@ -794,17 +863,16 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const labelRadius = radius + 10;
           
           // 화면 좌표계에서의 위치 계산
-          const screenX = xScale(vertexPoint.x) + Math.cos(midAngle) * labelRadius;
-          const screenY = yScale(vertexPoint.y) + Math.sin(midAngle) * labelRadius;
+          const screenX = vertexPoint.x + Math.cos(midAngle) * labelRadius / width * (xMax - xMin);
+          const screenY = vertexPoint.y + Math.sin(midAngle) * labelRadius / height * (yMax - yMin);
           
-          zoomGroup.append('text')
-            .attr('x', screenX)
-            .attr('y', screenY)
-            .attr('text-anchor', 'middle')
-            .attr('dominant-baseline', 'middle')
-            .attr('font-size', '12px')
-            .attr('fill', '#fd7e14')
-            .text(`${angle.value}°`);
+          createNonFlippedText(
+            zoomGroup, 
+            screenX, 
+            screenY, 
+            `${angle.value}°`, 
+            { fontSize: '12px', fill: '#fd7e14' }
+          );
         }
       }
     });
@@ -893,12 +961,12 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('stroke-dasharray', '4');
           
           // 반지름 값 표시
-          zoomGroup.append('text')
-            .attr('x', xScale((centerPoint.x + radiusEndX) / 2))
-            .attr('y', yScale((centerPoint.y + radiusEndY) / 2) - 10)
-            .attr('text-anchor', 'middle')
-            .attr('font-size', '12px')
-            .text(`r=${circle.radius.toFixed(2)}`);
+          createNonFlippedText(
+            zoomGroup, 
+            (centerPoint.x + radiusEndX) / 2, 
+            (centerPoint.y + radiusEndY) / 2 - 0.2, 
+            `r=${circle.radius.toFixed(2)}`
+          );
         }
       }
     });
@@ -947,14 +1015,20 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .attr('data-index', index.toString()) // 인덱스 저장
         .call(dragHandler as any); // 드래그 이벤트 연결
 
-      // 라벨 그리기
-      zoomGroup.append('text')
-        .attr('x', xScale(point.x) + 10)
-        .attr('y', yScale(point.y) - 10)
-        .attr('font-size', '14px')
-        .text(point.label);
+      // 라벨 그리기 (텍스트 반전 방지)
+      createNonFlippedText(
+        zoomGroup, 
+        point.x + 0.2, 
+        point.y - 0.2, 
+        point.label, 
+        { 
+          fontSize: '14px', 
+          textAnchor: 'start', 
+          dominantBaseline: 'hanging' 
+        }
+      );
     });
-  }, [data, onDataChange, showGrid, zoomLevel]); // zoomLevel 의존성 추가
+  }, [data, onDataChange, showGrid, zoomLevel, flipX, flipY]); // flipX, flipY 의존성 추가
 
   return (
     <div className="flex flex-col md:flex-row items-start gap-4 w-full">
@@ -984,8 +1058,22 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             </button>
           </div>
           
-          <div className="flex items-center">
-            <label className="inline-flex items-center cursor-pointer mr-4">
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setFlipX(!flipX)}
+              className={`px-2 py-1 ${flipX ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} hover:bg-blue-600 hover:text-white rounded text-xs`}
+              title="좌우 반전"
+            >
+              좌우 반전
+            </button>
+            <button
+              onClick={() => setFlipY(!flipY)}
+              className={`px-2 py-1 ${flipY ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'} hover:bg-blue-600 hover:text-white rounded text-xs`}
+              title="상하 반전"
+            >
+              상하 반전
+            </button>
+            <label className="inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
                 checked={showGrid}
