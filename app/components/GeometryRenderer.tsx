@@ -1369,90 +1369,88 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           </div>
         )}
         
-        {data.circles.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-bold">원:</h3>
-              <button
-                onClick={handleAddCircle}
-                className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-                disabled={data.points.length < 1}
-              >
-                원 추가
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-2">
-              {data.circles.map((circle, idx) => (
-                <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
-                  <div className="grid grid-cols-3 gap-2 items-center">
+        <div>
+          <div className="flex justify-between items-center mb-2">
+            <h3 className="font-bold">원:</h3>
+            <button
+              onClick={handleAddCircle}
+              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+              disabled={data.points.length < 1}
+            >
+              원 추가
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            {data.circles.map((circle, idx) => (
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-3 gap-2 items-center">
+                  <input
+                    type="text"
+                    value={circle.center}
+                    onChange={(e) => handleCircleChange(idx, 'center', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
+                    placeholder="중심점"
+                  />
+                  <input
+                    type="number"
+                    value={circle.radius}
+                    onChange={(e) => handleCircleChange(idx, 'radius', e.target.value)}
+                    step="0.1"
+                    className="w-full p-1 border rounded"
+                    placeholder="반지름"
+                  />
+                  <div className="flex items-center">
                     <input
-                      type="text"
-                      value={circle.center}
-                      onChange={(e) => handleCircleChange(idx, 'center', e.target.value)}
-                      className="w-full p-1 border rounded text-center"
-                      placeholder="중심점"
+                      type="checkbox"
+                      checked={circle.showRadius || false}
+                      onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
+                      className="mr-1"
                     />
-                    <input
-                      type="number"
-                      value={circle.radius}
-                      onChange={(e) => handleCircleChange(idx, 'radius', e.target.value)}
-                      step="0.1"
-                      className="w-full p-1 border rounded"
-                      placeholder="반지름"
-                    />
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={circle.showRadius || false}
-                        onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
-                        className="mr-1"
-                      />
-                      <span className="text-xs">반지름 표시</span>
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-4 gap-2 items-center mt-1">
-                    <input
-                      type="number"
-                      value={circle.startAngle !== undefined ? circle.startAngle : ''}
-                      onChange={(e) => handleCircleChange(idx, 'startAngle', e.target.value)}
-                      step="5"
-                      className="w-full p-1 border rounded"
-                      placeholder="시작 각도"
-                    />
-                    <input
-                      type="number"
-                      value={circle.endAngle !== undefined ? circle.endAngle : ''}
-                      onChange={(e) => handleCircleChange(idx, 'endAngle', e.target.value)}
-                      step="5"
-                      className="w-full p-1 border rounded"
-                      placeholder="끝 각도"
-                    />
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={circle.fillArc || false}
-                        onChange={(e) => handleCircleChange(idx, 'fillArc', e.target.checked)}
-                        className="mr-1"
-                      />
-                      <span className="text-xs">부채꼴</span>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteCircle(idx)}
-                      className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
-                    >
-                      ×
-                    </button>
-                  </div>
-                  
-                  <div className="text-xs text-gray-500 mt-1">
-                    {formatCircle(circle)}
+                    <span className="text-xs">반지름 표시</span>
                   </div>
                 </div>
-              ))}
-            </div>
+                
+                <div className="grid grid-cols-4 gap-2 items-center mt-1">
+                  <input
+                    type="number"
+                    value={circle.startAngle !== undefined ? circle.startAngle : ''}
+                    onChange={(e) => handleCircleChange(idx, 'startAngle', e.target.value)}
+                    step="5"
+                    className="w-full p-1 border rounded"
+                    placeholder="시작 각도"
+                  />
+                  <input
+                    type="number"
+                    value={circle.endAngle !== undefined ? circle.endAngle : ''}
+                    onChange={(e) => handleCircleChange(idx, 'endAngle', e.target.value)}
+                    step="5"
+                    className="w-full p-1 border rounded"
+                    placeholder="끝 각도"
+                  />
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={circle.fillArc || false}
+                      onChange={(e) => handleCircleChange(idx, 'fillArc', e.target.checked)}
+                      className="mr-1"
+                    />
+                    <span className="text-xs">부채꼴</span>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteCircle(idx)}
+                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                  >
+                    ×
+                  </button>
+                </div>
+                
+                <div className="text-xs text-gray-500 mt-1">
+                  {formatCircle(circle)}
+                </div>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
         
         <div>
           <div className="flex justify-between items-center mb-2">
