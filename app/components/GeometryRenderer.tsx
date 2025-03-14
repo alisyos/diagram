@@ -12,6 +12,7 @@ interface Line {
   end: string;
   length?: number;
   showLength?: boolean;
+  showLengthArc?: boolean; // 길이를 호로 표시할지 여부
 }
 
 interface Angle {
@@ -105,7 +106,11 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   };
 
   const formatLine = (line: Line) => {
-    return `${line.start}${line.end}: ${line.length ? line.length.toFixed(2) : '길이 미표시'}`;
+    let text = `${line.start}${line.end}: ${line.length ? line.length.toFixed(2) : '길이 미표시'}`;
+    if (line.showLengthArc) {
+      text += ' (호 표시)';
+    }
+    return text;
   };
 
   const formatAngle = (angle: Angle) => {
@@ -148,8 +153,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       if (!isNaN(numValue)) {
         newLines[index] = { ...newLines[index], length: numValue };
       }
-    } else if (field === 'showLength') {
-      newLines[index] = { ...newLines[index], showLength: value as boolean };
+    } else if (field === 'showLength' || field === 'showLengthArc') {
+      newLines[index] = { ...newLines[index], [field]: value as boolean };
     }
     
     onDataChange({ ...data, lines: newLines });
@@ -214,7 +219,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const newLine: Line = {
       start: data.points[0].label,
       end: data.points[1].label,
-      showLength: false
+      showLength: false,
+      showLengthArc: false
     };
     
     onDataChange({
@@ -641,6 +647,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const endPoint = points.find(p => p.label === line.end);
 
       if (startPoint && endPoint) {
+        // 선분 그리기
         zoomGroup.append('line')
           .attr('x1', xScale(startPoint.x))
           .attr('y1', yScale(startPoint.y))
@@ -659,6 +666,55 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('y', yScale(midY) - 10)
             .attr('text-anchor', 'middle')
             .attr('font-size', '12px')
+            .text(`${line.length.toFixed(2)}`);
+        }
+        
+        // 길이를 호로 표시
+        if (line.showLengthArc && line.length) {
+          // 두 점 사이의 거리 계산
+          const dx = endPoint.x - startPoint.x;
+          const dy = endPoint.y - startPoint.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          // 선분의 중점 계산
+          const midX = (startPoint.x + endPoint.x) / 2;
+          const midY = (startPoint.y + endPoint.y) / 2;
+          
+          // 선분의 방향 벡터 계산
+          const dirX = dx / distance;
+          const dirY = dy / distance;
+          
+          // 선분에 수직인 벡터 계산 (시계 방향으로 90도 회전)
+          const perpX = dirY;
+          const perpY = -dirX;
+          
+          // 호의 높이 계산 (선분 길이의 약 15%)
+          const arcHeight = distance * 0.15;
+          
+          // 호의 제어점 (선분의 중점에서 수직 방향으로 이동)
+          const controlX = midX + perpX * arcHeight;
+          const controlY = midY + perpY * arcHeight;
+          
+          // 2차 베지어 곡선으로 호 그리기
+          const pathData = `M ${xScale(startPoint.x)} ${yScale(startPoint.y)} 
+                            Q ${xScale(controlX)} ${yScale(controlY)}, 
+                            ${xScale(endPoint.x)} ${yScale(endPoint.y)}`;
+          
+          zoomGroup.append('path')
+            .attr('d', pathData)
+            .attr('fill', 'none')
+            .attr('stroke', '#adb5bd')
+            .attr('stroke-width', 1.5)
+            .attr('stroke-dasharray', '4');
+          
+          // 길이 값 표시 (제어점 위치에)
+          zoomGroup.append('text')
+            .attr('x', xScale(controlX))
+            .attr('y', yScale(controlY) - 5)
+            .attr('text-anchor', 'middle')
+            .attr('dominant-baseline', 'middle')
+            .attr('font-size', '12px')
+            .attr('fill', '#495057')
             .text(`${line.length.toFixed(2)}`);
         }
       }
@@ -1012,45 +1068,56 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           </div>
           <div className="grid grid-cols-1 gap-2">
             {data.lines.map((line, idx) => (
-              <div key={idx} className="bg-white p-2 rounded grid grid-cols-6 gap-2 items-center">
-                <input
-                  type="text"
-                  value={line.start}
-                  onChange={(e) => handleLineChange(idx, 'start', e.target.value)}
-                  className="w-full p-1 border rounded text-center"
-                />
-                <input
-                  type="text"
-                  value={line.end}
-                  onChange={(e) => handleLineChange(idx, 'end', e.target.value)}
-                  className="w-full p-1 border rounded text-center"
-                />
-                <input
-                  type="number"
-                  value={line.length || ''}
-                  onChange={(e) => handleLineChange(idx, 'length', e.target.value)}
-                  step="0.01"
-                  className="w-full p-1 border rounded"
-                  placeholder="길이"
-                />
-                <div className="flex items-center">
+              <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                <div className="grid grid-cols-6 gap-2 items-center">
                   <input
-                    type="checkbox"
-                    checked={line.showLength || false}
-                    onChange={(e) => handleLineChange(idx, 'showLength', e.target.checked)}
-                    className="mr-2"
+                    type="text"
+                    value={line.start}
+                    onChange={(e) => handleLineChange(idx, 'start', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
                   />
-                  <span className="text-xs">표시</span>
+                  <input
+                    type="text"
+                    value={line.end}
+                    onChange={(e) => handleLineChange(idx, 'end', e.target.value)}
+                    className="w-full p-1 border rounded text-center"
+                  />
+                  <input
+                    type="number"
+                    value={line.length || ''}
+                    onChange={(e) => handleLineChange(idx, 'length', e.target.value)}
+                    step="0.01"
+                    className="w-full p-1 border rounded"
+                    placeholder="길이"
+                  />
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={line.showLength || false}
+                      onChange={(e) => handleLineChange(idx, 'showLength', e.target.checked)}
+                      className="mr-1"
+                    />
+                    <span className="text-xs">직선</span>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={line.showLengthArc || false}
+                      onChange={(e) => handleLineChange(idx, 'showLengthArc', e.target.checked)}
+                      className="mr-1"
+                    />
+                    <span className="text-xs">호</span>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteLine(idx)}
+                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                  >
+                    ×
+                  </button>
                 </div>
-                <span className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 mt-1">
                   {formatLine(line)}
-                </span>
-                <button
-                  onClick={() => handleDeleteLine(idx)}
-                  className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
-                >
-                  ×
-                </button>
+                </div>
               </div>
             ))}
           </div>
