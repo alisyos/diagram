@@ -23,6 +23,10 @@ export interface Circle {
   center: string;
   radius: number;
   showRadius?: boolean;
+  startAngle?: number;
+  endAngle?: number;
+  showArc?: boolean;
+  fillArc?: boolean;
 }
 
 export interface Curve {
