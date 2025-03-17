@@ -652,37 +652,37 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     // 정사각형 모눈종이를 위한 스케일 조정
     // 더 넓은 범위를 기준으로 동일한 스케일 적용
     const maxRange = Math.max(shapeWidth, shapeHeight);
-    const xPadding = (maxRange - shapeWidth) / 2;
-    const yPadding = (maxRange - shapeHeight) / 2;
-
+    
     // SVG의 가로세로 비율 계산
     const svgAspectRatio = (width - 2 * padding) / (height - 2 * padding);
     
-    // x축과 y축의 스케일을 완전히 동일하게 설정
-    // SVG의 가로세로 비율을 고려하여 도메인 범위 조정
-    const xDomainSize = (maxRange + shapeWidth * 0.4) * svgAspectRatio;
-    const yDomainSize = maxRange + shapeHeight * 0.4;
+    // 원점(0,0)이 항상 중앙에 오도록 도메인 범위 조정
+    const xDomainSize = Math.max(20, maxRange) * svgAspectRatio;
+    const yDomainSize = Math.max(20, maxRange);
     
-    const xDomainCenter = (xMin + xMax) / 2;
-    const yDomainCenter = (yMin + yMax) / 2;
+    // 원점 중심으로 도메인 설정
+    const xDomainMin = -xDomainSize / 2;
+    const xDomainMax = xDomainSize / 2;
+    const yDomainMin = -yDomainSize / 2;
+    const yDomainMax = yDomainSize / 2;
 
     // 스케일 조정 (여백을 고려한 중앙 정렬)
     const xScale = d3.scaleLinear()
-      .domain([xDomainCenter - xDomainSize / 2, xDomainCenter + xDomainSize / 2])
+      .domain([xDomainMin, xDomainMax])
       .range([padding, width - padding]);
 
     const yScale = d3.scaleLinear()
-      .domain([yDomainCenter - yDomainSize / 2, yDomainCenter + yDomainSize / 2])
+      .domain([yDomainMin, yDomainMax])
       .range([height - padding, padding]);
 
     // 역 스케일 함수 (SVG 좌표 -> 실제 좌표)
     const xInverse = d3.scaleLinear()
       .domain([padding, width - padding])
-      .range([xDomainCenter - xDomainSize / 2, xDomainCenter + xDomainSize / 2]);
+      .range([xDomainMin, xDomainMax]);
 
     const yInverse = d3.scaleLinear()
       .domain([height - padding, padding])
-      .range([yDomainCenter - yDomainSize / 2, yDomainCenter + yDomainSize / 2]);
+      .range([yDomainMin, yDomainMax]);
 
     // SVG의 중심점 계산
     const centerX = width / 2;
@@ -926,7 +926,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .datum(points)
         .attr('fill', 'none')
         .attr('stroke', curve.type === 'linear' ? '#ff6b6b' : '#4dabf7')
-        .attr('stroke-width', 2)
+        .attr('stroke-width', 1.5)
         .attr('d', line);
       
       // 함수 이름 표시
@@ -971,7 +971,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('x2', xScale(endPoint.x))
           .attr('y2', yScale(endPoint.y))
           .attr('stroke', '#212529')
-          .attr('stroke-width', 2.5);
+          .attr('stroke-width', 1.5);
 
         // 길이 표시
         if (line.showLength && line.length) {
@@ -1022,7 +1022,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('d', pathData)
             .attr('fill', 'none')
             .attr('stroke', '#adb5bd')
-            .attr('stroke-width', 2)
+            .attr('stroke-width', 1.5)
             .attr('stroke-dasharray', '4');
           
           // 길이 값 표시 (제어점 위치에)
@@ -1104,7 +1104,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
             .attr('fill', 'none')
             .attr('stroke', '#fd7e14')
-            .attr('stroke-width', 2); // 선 두께를 원래 크기인 2로 복구
+            .attr('stroke-width', 1.5); // 선 두께를 원래 크기인 2로 복구
           
           // 각도 값 표시
           const midAngle = (adjustedStartAngle + adjustedEndAngle) / 2;
@@ -1141,7 +1141,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
             .attr('fill', 'none')
             .attr('stroke', '#20c997')
-            .attr('stroke-width', 2.5); // 선 두께를 2에서 2.5로 증가
+            .attr('stroke-width', 1.5); // 선 두께를 2에서 2.5로 증가
         } else {
           // 부채꼴/호 그리기
           const startAngleRad = ((circle.startAngle || 0) * Math.PI) / 180;
@@ -1159,7 +1159,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
             .attr('fill', circle.fillArc ? 'rgba(32, 201, 151, 0.3)' : 'none') // 투명도를 0.2에서 0.3으로 증가
             .attr('stroke', '#20c997')
-            .attr('stroke-width', 2.5); // 선 두께를 2에서 2.5로 증가
+            .attr('stroke-width', 1.5); // 선 두께를 2에서 2.5로 증가
           
           // 호의 시작점과 끝점을 중심과 연결하는 선 (부채꼴인 경우)
           if (circle.fillArc) {
@@ -1173,7 +1173,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
               .attr('x2', xScale(startX))
               .attr('y2', yScale(startY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 2); // 선 두께를 1.5에서 2로 증가
+              .attr('stroke-width', 1.5); // 선 두께를 1.5에서 2로 증가
             
             // 끝점 연결선
             const endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
@@ -1185,7 +1185,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
               .attr('x2', xScale(endX))
               .attr('y2', yScale(endY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 2); // 선 두께를 1.5에서 2로 증가
+              .attr('stroke-width', 1.5); // 선 두께를 1.5에서 2로 증가
           }
         }
         
