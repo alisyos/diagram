@@ -657,8 +657,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const svgAspectRatio = (width - 2 * padding) / (height - 2 * padding);
     
     // 원점(0,0)이 항상 중앙에 오도록 도메인 범위 조정
-    const xDomainSize = Math.max(20, maxRange) * svgAspectRatio;
-    const yDomainSize = Math.max(20, maxRange);
+    // 모눈종이 기준 5칸 정도로 표시되도록 도메인 크기 조정
+    const xDomainSize = Math.max(5, maxRange / 2) * svgAspectRatio;
+    const yDomainSize = Math.max(5, maxRange / 2);
     
     // 원점 중심으로 도메인 설정
     const xDomainMin = -xDomainSize / 2;
@@ -1087,28 +1088,96 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 각도 호 그리기 (showValue가 true인 경우에만)
         if (angle.showValue) {
-          const radius = 20; // 호의 반지름을 원래 크기인 20으로 복구
+          const radius = 20; // 반지름 크기를 30에서 20으로 감소
           
-          // SVG 좌표계에서는 y축이 반전되어 있으므로 각도도 반전
-          // D3의 arc 함수는 시계 방향으로 각도를 측정하지만, 
-          // SVG 좌표계에서는 y축이 아래로 증가하므로 반시계 방향으로 그려짐
-          const arcGenerator = d3.arc()
-            .innerRadius(radius)
-            .outerRadius(radius)
-            .startAngle(adjustedStartAngle)
-            .endAngle(adjustedEndAngle)
-            .context(null);
-          
-          shapeGroup.append('path')
-            .attr('d', arcGenerator({} as any))
-            .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
-            .attr('fill', 'none')
-            .attr('stroke', '#fd7e14')
-            .attr('stroke-width', 1.5); // 선 두께를 원래 크기인 2로 복구
+          // 직각(90도)인 경우 직각 기호로 표시
+          if (Math.abs(angle.value - 90) < 0.1) { // 90도에 가까운 경우 (오차 허용)
+            // 두 벡터의 단위 벡터 계산
+            const startVectorLength = Math.sqrt(startVector.x * startVector.x + startVector.y * startVector.y);
+            const endVectorLength = Math.sqrt(endVector.x * endVector.x + endVector.y * endVector.y);
+            
+            const startUnitVector = {
+              x: startVector.x / startVectorLength,
+              y: startVector.y / startVectorLength
+            };
+            
+            const endUnitVector = {
+              x: endVector.x / endVectorLength,
+              y: endVector.y / endVectorLength
+            };
+            
+            // 직각 기호의 크기를 더 작게 조정 (화면에서 벗어나지 않도록)
+            const squareSize = radius * 0.02; // 크기 감소 (0.05에서 0.02로)
+            
+            // 직각 기호의 세 점 계산
+            const point1 = {
+              x: startUnitVector.x * squareSize,
+              y: startUnitVector.y * squareSize
+            };
+            
+            const point3 = {
+              x: endUnitVector.x * squareSize,
+              y: endUnitVector.y * squareSize
+            };
+            
+            const point2 = {
+              x: point1.x + endUnitVector.x * squareSize,
+              y: point1.y + endUnitVector.y * squareSize
+            };
+            
+            // 회전 변환을 적용하기 위한 그룹 생성
+            const rightAngleGroup = shapeGroup.append('g')
+              .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`);
+            
+            // 직각 기호 그리기 (ㄱ 모양) - 상대 좌표로 변경
+            // 회전 효과가 적용되도록 SVG 좌표 변환 방식 수정
+            const p1x = xScale(vertexPoint.x + point1.x) - xScale(vertexPoint.x);
+            const p1y = yScale(vertexPoint.y + point1.y) - yScale(vertexPoint.y);
+            const p2x = xScale(vertexPoint.x + point2.x) - xScale(vertexPoint.x);
+            const p2y = yScale(vertexPoint.y + point2.y) - yScale(vertexPoint.y);
+            const p3x = xScale(vertexPoint.x + point3.x) - xScale(vertexPoint.x);
+            const p3y = yScale(vertexPoint.y + point3.y) - yScale(vertexPoint.y);
+            
+            const pathData = `M ${p1x} ${p1y} L ${p2x} ${p2y} L ${p3x} ${p3y}`;
+            
+            rightAngleGroup.append('path')
+              .attr('d', pathData)
+              .attr('fill', 'none')
+              .attr('stroke', '#fd7e14')
+              .attr('stroke-width', 2);
+              
+            // 직각 표시 사각형 추가 (더 명확하게 보이도록)
+            const smallSquareSize = squareSize * 0.3;
+            const rectX = p2x - smallSquareSize / 2;
+            const rectY = p2y - smallSquareSize / 2;
+            
+            rightAngleGroup.append('rect')
+              .attr('x', rectX)
+              .attr('y', rectY)
+              .attr('width', smallSquareSize)
+              .attr('height', smallSquareSize)
+              .attr('fill', '#fd7e14')
+              .attr('stroke', 'none');
+          } else {
+            // 일반 각도는 원호로 표시
+            const arcGenerator = d3.arc()
+              .innerRadius(radius)
+              .outerRadius(radius)
+              .startAngle(adjustedStartAngle)
+              .endAngle(adjustedEndAngle)
+              .context(null);
+            
+            shapeGroup.append('path')
+              .attr('d', arcGenerator({} as any))
+              .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
+              .attr('fill', 'none')
+              .attr('stroke', '#fd7e14')
+              .attr('stroke-width', 1.5);
+          }
           
           // 각도 값 표시
           const midAngle = (adjustedStartAngle + adjustedEndAngle) / 2;
-          const labelRadius = radius + 10; // 레이블 거리를 원래 크기인 10으로 복구
+          const labelRadius = radius + 10;
           
           // 화면 좌표계에서의 위치 계산
           const screenX = vertexPoint.x + Math.cos(midAngle) * labelRadius / width * (xMax - xMin);
