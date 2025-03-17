@@ -29,6 +29,7 @@ interface Circle {
   center: string;
   radius: number;
   showRadius?: boolean;
+  showRadiusArc?: boolean; // 반지름을 호로 표시할지 여부 추가
   startAngle?: number; // 시작 각도 (도 단위, 0-360)
   endAngle?: number; // 끝 각도 (도 단위, 0-360)
   showArc?: boolean; // 호를 표시할지 여부
@@ -108,6 +109,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const [zoomLevel, setZoomLevel] = useState(1); // 확대/축소 레벨 상태
   const [flipX, setFlipX] = useState(false); // 좌우 반전 상태
   const [flipY, setFlipY] = useState(false); // 상하 반전 상태
+  const [rotation, setRotation] = useState(0); // 회전 각도 상태 (도 단위)
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 }); // 패닝 오프셋 상태
   const [isDragging, setIsDragging] = useState(false); // 드래그 중인지 여부
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 드래그 시작 위치
@@ -221,7 +223,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       if (!isNaN(numValue)) {
         newCircles[index] = { ...newCircles[index], [field]: numValue };
       }
-    } else if (field === 'showRadius' || field === 'showArc' || field === 'fillArc') {
+    } else if (field === 'showRadius' || field === 'showRadiusArc' || field === 'showArc' || field === 'fillArc') {
       newCircles[index] = { ...newCircles[index], [field]: value as boolean };
     }
     
@@ -249,11 +251,19 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleAddLine = () => {
     if (!onDataChange || actualData.points.length < 2) return;
     
+    // 선택된 두 점 사이의 거리 계산
+    const startPoint = actualData.points[0];
+    const endPoint = actualData.points[1];
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
     const newLine: Line = {
-      start: actualData.points[0].label,
-      end: actualData.points[1].label,
-      showLength: false,
-      showLengthArc: false
+      start: startPoint.label,
+      end: endPoint.label,
+      showLength: true,
+      showLengthArc: false,
+      length: distance > 0 ? distance : 5 // 실제 거리가 있으면 그 값을, 없으면 기본값 5 사용
     };
     
     onDataChange({
@@ -268,8 +278,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     
     const newCircle: Circle = {
       center: actualData.points[0].label,
-      radius: 1.0,
-      showRadius: false
+      radius: 3.0, // 기본 반지름을 1.0에서 3.0으로 증가
+      showRadius: true, // 반지름 표시를 기본으로 활성화
+      showRadiusArc: false // 반지름 호 표시는 기본적으로 비활성화
     };
     
     onDataChange({
@@ -399,6 +410,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const handleResetZoom = () => {
     setZoomLevel(1);
     setPanOffset({ x: 0, y: 0 }); // 패닝도 초기화
+    setRotation(0); // 회전도 초기화
   };
 
   // 패닝 시작 핸들러
@@ -483,6 +495,64 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     
     newPoints[index] = { ...newPoints[index], [field]: newValue };
     onDataChange({ ...actualData, points: newPoints });
+  };
+
+  // 새로운 각도 추가 핸들러
+  const handleAddAngle = () => {
+    if (!onDataChange || actualData.points.length < 3) return;
+    
+    // 세 점으로 각도 계산
+    const vertexPoint = actualData.points[0];
+    const startPoint = actualData.points[1];
+    const endPoint = actualData.points[2];
+    
+    // 벡터 계산
+    const startVector = {
+      x: startPoint.x - vertexPoint.x,
+      y: startPoint.y - vertexPoint.y
+    };
+    const endVector = {
+      x: endPoint.x - vertexPoint.x,
+      y: endPoint.y - vertexPoint.y
+    };
+    
+    // 벡터의 각도 계산 (라디안)
+    const startAngle = Math.atan2(startVector.y, startVector.x);
+    const endAngle = Math.atan2(endVector.y, endVector.x);
+    
+    // 두 벡터 사이의 각도 계산 (라디안)
+    let angleDiff = endAngle - startAngle;
+    
+    // 각도가 180도를 넘지 않도록 조정
+    if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+    if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+    
+    // 라디안을 도로 변환
+    const angleDegrees = Math.round(Math.abs(angleDiff) * 180 / Math.PI);
+    
+    const newAngle: Angle = {
+      vertex: vertexPoint.label,
+      start: startPoint.label,
+      end: endPoint.label,
+      value: angleDegrees || 90, // 계산된 각도가 0이면 기본값 90 사용
+      showValue: true,
+      rotation: 0
+    };
+    
+    onDataChange({
+      ...actualData,
+      angles: [...actualData.angles, newAngle]
+    });
+  };
+
+  // 회전 각도 변경 핸들러
+  const handleRotationChange = (angle: number) => {
+    setRotation(angle);
+  };
+
+  // 회전 초기화 핸들러
+  const handleResetRotation = () => {
+    setRotation(0);
   };
 
   useEffect(() => {
@@ -614,14 +684,34 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       .domain([height - padding, padding])
       .range([yDomainCenter - yDomainSize / 2, yDomainCenter + yDomainSize / 2]);
 
-    // 확대/축소 및 반전 적용을 위한 그룹 생성
-    const zoomGroup = svg.append('g')
+    // SVG의 중심점 계산
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    // 패닝 및 확대/축소만 적용하는 그룹 (모눈종이용)
+    const gridGroup = svg.append('g')
       .attr('transform', function() {
-        // SVG의 중심점 계산
-        const centerX = width / 2;
-        const centerY = height / 2;
+        let transform = '';
         
-        // 확대/축소 및 반전을 중심점 기준으로 적용
+        // 패닝 오프셋 적용
+        transform += `translate(${panOffset.x}, ${panOffset.y}) `;
+        
+        // 확대/축소 적용 (중심점 기준)
+        transform += `translate(${centerX}, ${centerY}) `;
+        transform += `scale(${zoomLevel}) `;
+        transform += `translate(${-centerX}, ${-centerY}) `;
+        
+        // 확대/축소에 따른 추가 이동 (중심 유지를 위해)
+        const zoomOffsetX = (width * (1 - zoomLevel)) / (2 * zoomLevel);
+        const zoomOffsetY = (height * (1 - zoomLevel)) / (2 * zoomLevel);
+        transform += `translate(${zoomOffsetX}, ${zoomOffsetY})`;
+        
+        return transform;
+      });
+
+    // 패닝, 확대/축소, 반전, 회전을 모두 적용하는 그룹 (도형용)
+    const shapeGroup = svg.append('g')
+      .attr('transform', function() {
         let transform = '';
         
         // 패닝 오프셋 적용
@@ -629,6 +719,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 먼저 중심으로 이동
         transform += `translate(${centerX}, ${centerY}) `;
+        
+        // 회전 적용 (도 단위를 라디안으로 변환)
+        transform += `rotate(${rotation}) `;
         
         // 확대/축소 및 반전 적용
         transform += `scale(${zoomLevel * (flipX ? -1 : 1)}, ${zoomLevel * (flipY ? -1 : 1)}) `;
@@ -654,14 +747,16 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         fontSize?: string,
         fill?: string,
         textAnchor?: string,
-        dominantBaseline?: string
+        dominantBaseline?: string,
+        fontWeight?: string
       } = {}
     ) => {
       const {
         fontSize = '12px',
         fill = '#000',
         textAnchor = 'middle',
-        dominantBaseline = 'middle'
+        dominantBaseline = 'middle',
+        fontWeight = 'normal'
       } = options;
       
       const textGroup = parent.append('g')
@@ -670,11 +765,17 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const textX = xScale(x);
           const textY = yScale(y);
           
-          // 텍스트 반전 방지를 위한 변환
+          // 텍스트 반전 및 회전 방지를 위한 변환
           let transform = `translate(${textX}, ${textY})`;
           
           // 반전이 적용된 경우 텍스트에 대해 반전을 상쇄
-          if (flipX || flipY) {
+          if (flipX || flipY || rotation !== 0) {
+            // 회전 상쇄 (반대 방향으로 회전)
+            if (rotation !== 0) {
+              transform += ` rotate(${-rotation})`;
+            }
+            
+            // 반전 상쇄
             transform += ` scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`;
           }
           
@@ -686,13 +787,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .attr('dominant-baseline', dominantBaseline)
         .attr('font-size', fontSize)
         .attr('fill', fill)
+        .attr('font-weight', fontWeight)
         .text(text);
     };
 
     // 모눈종이 그리기 (showGrid가 true일 때만)
     if (showGrid) {
       // 배경 사각형 추가
-      zoomGroup.append('rect')
+      gridGroup.append('rect')
         .attr('x', padding)
         .attr('y', padding)
         .attr('width', width - 2 * padding)
@@ -706,7 +808,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       // x축 모눈선 그리기
       const xDomain = xScale.domain();
       for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += gridStep) {
-        zoomGroup.append('line')
+        gridGroup.append('line')
           .attr('x1', xScale(x))
           .attr('y1', padding)
           .attr('x2', xScale(x))
@@ -716,7 +818,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 주요 눈금에 숫자 표시 (5의 배수일 때)
         if (x % 5 === 0) {
-          zoomGroup.append('text')
+          gridGroup.append('text')
             .attr('x', xScale(x))
             .attr('y', height - padding + 20)
             .attr('text-anchor', 'middle')
@@ -729,7 +831,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       // y축 모눈선 그리기
       const yDomain = yScale.domain();
       for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += gridStep) {
-        zoomGroup.append('line')
+        gridGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(y))
           .attr('x2', width - padding)
@@ -739,7 +841,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 주요 눈금에 숫자 표시 (5의 배수일 때)
         if (y % 5 === 0) {
-          zoomGroup.append('text')
+          gridGroup.append('text')
             .attr('x', padding - 10)
             .attr('y', yScale(y))
             .attr('text-anchor', 'end')
@@ -752,7 +854,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       
       // 원점 강조 (0, 0)
       if (xDomain[0] <= 0 && xDomain[1] >= 0 && yDomain[0] <= 0 && yDomain[1] >= 0) {
-        zoomGroup.append('line')
+        gridGroup.append('line')
           .attr('x1', xScale(0))
           .attr('y1', padding)
           .attr('x2', xScale(0))
@@ -760,7 +862,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('stroke', '#adb5bd')
           .attr('stroke-width', 1.5);
         
-        zoomGroup.append('line')
+        gridGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(0))
           .attr('x2', width - padding)
@@ -775,11 +877,11 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       const xAxis = d3.axisBottom(xScale);
       const yAxis = d3.axisLeft(yScale);
       
-      zoomGroup.append('g')
+      gridGroup.append('g')
         .attr('transform', `translate(0, ${yScale(0)})`)
         .call(xAxis);
       
-      zoomGroup.append('g')
+      gridGroup.append('g')
         .attr('transform', `translate(${xScale(0)}, 0)`)
         .call(yAxis);
     }
@@ -820,7 +922,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         .y(d => yScale(d[1]))
         .curve(d3.curveMonotoneX);
       
-      zoomGroup.append('path')
+      shapeGroup.append('path')
         .datum(points)
         .attr('fill', 'none')
         .attr('stroke', curve.type === 'linear' ? '#ff6b6b' : '#4dabf7')
@@ -848,7 +950,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           break;
       }
       
-      zoomGroup.append('text')
+      shapeGroup.append('text')
         .attr('x', xScale(lastPoint[0]))
         .attr('y', yScale(lastPoint[1]) - 10)
         .attr('text-anchor', 'end')
@@ -863,20 +965,26 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
 
       if (startPoint && endPoint) {
         // 선분 그리기
-        zoomGroup.append('line')
+        shapeGroup.append('line')
           .attr('x1', xScale(startPoint.x))
           .attr('y1', yScale(startPoint.y))
           .attr('x2', xScale(endPoint.x))
           .attr('y2', yScale(endPoint.y))
           .attr('stroke', '#212529')
-          .attr('stroke-width', 2);
+          .attr('stroke-width', 2.5);
 
         // 길이 표시
         if (line.showLength && line.length) {
           const midX = (startPoint.x + endPoint.x) / 2;
           const midY = (startPoint.y + endPoint.y) / 2;
           
-          createNonFlippedText(zoomGroup, midX, midY - 0.2, formatNumber(line.length));
+          createNonFlippedText(
+            shapeGroup, 
+            midX, 
+            midY - 0.3,
+            formatNumber(line.length),
+            { fontSize: '13px', fontWeight: 'bold' }
+          );
         }
         
         // 길이를 호로 표시
@@ -910,20 +1018,20 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                             Q ${xScale(controlX)} ${yScale(controlY)}, 
                             ${xScale(endPoint.x)} ${yScale(endPoint.y)}`;
           
-          zoomGroup.append('path')
+          shapeGroup.append('path')
             .attr('d', pathData)
             .attr('fill', 'none')
             .attr('stroke', '#adb5bd')
-            .attr('stroke-width', 1.5)
+            .attr('stroke-width', 2)
             .attr('stroke-dasharray', '4');
           
           // 길이 값 표시 (제어점 위치에)
           createNonFlippedText(
-            zoomGroup, 
+            shapeGroup, 
             controlX, 
-            controlY - 0.1, 
+            controlY - 0.2,
             formatNumber(line.length), 
-            { fill: '#495057' }
+            { fill: '#495057', fontSize: '13px', fontWeight: 'bold' }
           );
         }
       }
@@ -979,7 +1087,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         // 각도 호 그리기 (showValue가 true인 경우에만)
         if (angle.showValue) {
-          const radius = 20; // 호의 반지름 (픽셀 단위)
+          const radius = 20; // 호의 반지름을 원래 크기인 20으로 복구
           
           // SVG 좌표계에서는 y축이 반전되어 있으므로 각도도 반전
           // D3의 arc 함수는 시계 방향으로 각도를 측정하지만, 
@@ -991,23 +1099,23 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .endAngle(adjustedEndAngle)
             .context(null);
           
-          zoomGroup.append('path')
+          shapeGroup.append('path')
             .attr('d', arcGenerator({} as any))
             .attr('transform', `translate(${xScale(vertexPoint.x)}, ${yScale(vertexPoint.y)})`)
             .attr('fill', 'none')
             .attr('stroke', '#fd7e14')
-            .attr('stroke-width', 2);
+            .attr('stroke-width', 2); // 선 두께를 원래 크기인 2로 복구
           
           // 각도 값 표시
           const midAngle = (adjustedStartAngle + adjustedEndAngle) / 2;
-          const labelRadius = radius + 10;
+          const labelRadius = radius + 10; // 레이블 거리를 원래 크기인 10으로 복구
           
           // 화면 좌표계에서의 위치 계산
           const screenX = vertexPoint.x + Math.cos(midAngle) * labelRadius / width * (xMax - xMin);
           const screenY = vertexPoint.y + Math.sin(midAngle) * labelRadius / height * (yMax - yMin);
           
           createNonFlippedText(
-            zoomGroup, 
+            shapeGroup, 
             screenX, 
             screenY, 
             `${angle.value}°`, 
@@ -1027,13 +1135,13 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         if (isFullCircle) {
           // 완전한 원 그리기
-          zoomGroup.append('circle')
+          shapeGroup.append('circle')
             .attr('cx', xScale(centerPoint.x))
             .attr('cy', yScale(centerPoint.y))
             .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
             .attr('fill', 'none')
             .attr('stroke', '#20c997')
-            .attr('stroke-width', 2);
+            .attr('stroke-width', 2.5); // 선 두께를 2에서 2.5로 증가
         } else {
           // 부채꼴/호 그리기
           const startAngleRad = ((circle.startAngle || 0) * Math.PI) / 180;
@@ -1046,12 +1154,12 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .startAngle(startAngleRad)
             .endAngle(endAngleRad);
           
-          zoomGroup.append('path')
+          shapeGroup.append('path')
             .attr('d', arcGenerator({} as any))
             .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
-            .attr('fill', circle.fillArc ? 'rgba(32, 201, 151, 0.2)' : 'none')
+            .attr('fill', circle.fillArc ? 'rgba(32, 201, 151, 0.3)' : 'none') // 투명도를 0.2에서 0.3으로 증가
             .attr('stroke', '#20c997')
-            .attr('stroke-width', 2);
+            .attr('stroke-width', 2.5); // 선 두께를 2에서 2.5로 증가
           
           // 호의 시작점과 끝점을 중심과 연결하는 선 (부채꼴인 경우)
           if (circle.fillArc) {
@@ -1059,30 +1167,30 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             const startX = centerPoint.x + circle.radius * Math.cos(startAngleRad);
             const startY = centerPoint.y + circle.radius * Math.sin(startAngleRad);
             
-            zoomGroup.append('line')
+            shapeGroup.append('line')
               .attr('x1', xScale(centerPoint.x))
               .attr('y1', yScale(centerPoint.y))
               .attr('x2', xScale(startX))
               .attr('y2', yScale(startY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 1.5);
+              .attr('stroke-width', 2); // 선 두께를 1.5에서 2로 증가
             
             // 끝점 연결선
             const endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
             const endY = centerPoint.y + circle.radius * Math.sin(endAngleRad);
             
-            zoomGroup.append('line')
+            shapeGroup.append('line')
               .attr('x1', xScale(centerPoint.x))
               .attr('y1', yScale(centerPoint.y))
               .attr('x2', xScale(endX))
               .attr('y2', yScale(endY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 1.5);
+              .attr('stroke-width', 2); // 선 두께를 1.5에서 2로 증가
           }
         }
         
         // 반지름 표시
-        if (circle.showRadius) {
+        if (circle.showRadius || circle.showRadiusArc) {
           // 반지름 표시 각도 계산 (부채꼴인 경우 중간 각도, 아니면 0도)
           const radiusAngle = !isFullCircle ? 
             (((circle.startAngle || 0) + (circle.endAngle || 0)) / 2) * Math.PI / 180 : 0;
@@ -1090,23 +1198,68 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const radiusEndX = centerPoint.x + circle.radius * Math.cos(radiusAngle);
           const radiusEndY = centerPoint.y + circle.radius * Math.sin(radiusAngle);
           
-          // 반지름 선 그리기
-          zoomGroup.append('line')
-            .attr('x1', xScale(centerPoint.x))
-            .attr('y1', yScale(centerPoint.y))
-            .attr('x2', xScale(radiusEndX))
-            .attr('y2', yScale(radiusEndY))
-            .attr('stroke', '#20c997')
-            .attr('stroke-width', 1)
-            .attr('stroke-dasharray', '4');
+          // 직선으로 반지름 표시
+          if (circle.showRadius) {
+            // 반지름 선 그리기
+            shapeGroup.append('line')
+              .attr('x1', xScale(centerPoint.x))
+              .attr('y1', yScale(centerPoint.y))
+              .attr('x2', xScale(radiusEndX))
+              .attr('y2', yScale(radiusEndY))
+              .attr('stroke', '#20c997')
+              .attr('stroke-width', 1.5)
+              .attr('stroke-dasharray', '4');
+            
+            // 반지름 값 표시 (수치만 표시)
+            createNonFlippedText(
+              shapeGroup, 
+              (centerPoint.x + radiusEndX) / 2, 
+              (centerPoint.y + radiusEndY) / 2 - 0.2, 
+              formatNumber(circle.radius),
+              { fontSize: '13px', fontWeight: 'bold', fill: '#20c997' }
+            );
+          }
           
-          // 반지름 값 표시
-          createNonFlippedText(
-            zoomGroup, 
-            (centerPoint.x + radiusEndX) / 2, 
-            (centerPoint.y + radiusEndY) / 2 - 0.2, 
-            `r=${circle.radius.toFixed(2)}`
-          );
+          // 호로 반지름 표시
+          if (circle.showRadiusArc) {
+            // 호의 높이 계산 (반지름의 약 15%)
+            const arcHeight = circle.radius * 0.15;
+            
+            // 반지름 방향 벡터 계산
+            const dirX = (radiusEndX - centerPoint.x) / circle.radius;
+            const dirY = (radiusEndY - centerPoint.y) / circle.radius;
+            
+            // 반지름에 수직인 벡터 계산 (시계 방향으로 90도 회전)
+            const perpX = dirY;
+            const perpY = -dirX;
+            
+            // 호의 제어점 (반지름의 중점에서 수직 방향으로 이동)
+            const midX = (centerPoint.x + radiusEndX) / 2;
+            const midY = (centerPoint.y + radiusEndY) / 2;
+            const controlX = midX + perpX * arcHeight;
+            const controlY = midY + perpY * arcHeight;
+            
+            // 2차 베지어 곡선으로 호 그리기
+            const pathData = `M ${xScale(centerPoint.x)} ${yScale(centerPoint.y)} 
+                              Q ${xScale(controlX)} ${yScale(controlY)}, 
+                              ${xScale(radiusEndX)} ${yScale(radiusEndY)}`;
+            
+            shapeGroup.append('path')
+              .attr('d', pathData)
+              .attr('fill', 'none')
+              .attr('stroke', '#20c997')
+              .attr('stroke-width', 1.5)
+              .attr('stroke-dasharray', '4');
+            
+            // 길이 값 표시 (제어점 위치에)
+            createNonFlippedText(
+              shapeGroup, 
+              controlX, 
+              controlY - 0.2, 
+              formatNumber(circle.radius), 
+              { fill: '#20c997', fontSize: '13px', fontWeight: 'bold' }
+            );
+          }
         }
       }
     });
@@ -1161,18 +1314,18 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       if (point.visible === false) return;
       
       // 점 그리기
-      zoomGroup.append('circle')
+      shapeGroup.append('circle')
         .attr('cx', xScale(point.x))
         .attr('cy', yScale(point.y))
         .attr('r', 5)
         .attr('fill', '#4dabf7')
-        .attr('cursor', 'move') // 커서 스타일 변경
-        .attr('data-index', index.toString()) // 인덱스 저장
-        .call(dragHandler as any); // 드래그 이벤트 연결
+        .attr('cursor', 'move')
+        .attr('data-index', index.toString())
+        .call(dragHandler as any);
 
       // 라벨 그리기 (텍스트 반전 방지)
       createNonFlippedText(
-        zoomGroup, 
+        shapeGroup, 
         point.x + 0.2, 
         point.y - 0.2, 
         point.label, 
@@ -1183,7 +1336,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         }
       );
     });
-  }, [actualData, onDataChange, showGrid, zoomLevel, flipX, flipY, panOffset]); // panOffset 의존성 추가
+  }, [actualData, onDataChange, showGrid, zoomLevel, flipX, flipY, rotation, panOffset]);
 
   // 컴포넌트 마운트 시 커서 스타일 설정
   useEffect(() => {
@@ -1235,6 +1388,32 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             >
               상하 반전
             </button>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => handleRotationChange((rotation - 15) % 360)}
+                className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700"
+                title="반시계 방향으로 15도 회전"
+              >
+                ↺
+              </button>
+              <div className="px-2 py-1 bg-gray-100 rounded text-xs text-gray-700 min-w-[40px] text-center">
+                {rotation}°
+              </div>
+              <button
+                onClick={() => handleRotationChange((rotation + 15) % 360)}
+                className="w-6 h-6 flex items-center justify-center bg-gray-200 hover:bg-gray-300 rounded text-gray-700"
+                title="시계 방향으로 15도 회전"
+              >
+                ↻
+              </button>
+              <button
+                onClick={handleResetRotation}
+                className="px-1 py-1 bg-gray-200 hover:bg-gray-300 rounded text-xs text-gray-700"
+                title="회전 초기화"
+              >
+                초기화
+              </button>
+            </div>
             <label className="inline-flex items-center cursor-pointer">
               <input
                 type="checkbox"
@@ -1396,22 +1575,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-bold">각도:</h3>
             <button
-              onClick={() => {
-                if (!onDataChange || actualData.points.length < 3) return;
-                
-                const newAngle: Angle = {
-                  vertex: actualData.points[0].label,
-                  start: actualData.points[1].label,
-                  end: actualData.points[2].label,
-                  value: 90,
-                  showValue: true
-                };
-                
-                onDataChange({
-                  ...actualData,
-                  angles: [...actualData.angles, newAngle]
-                });
-              }}
+              onClick={handleAddAngle}
               className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
               disabled={actualData.points.length < 3}
             >
@@ -1510,7 +1674,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           <div className="grid grid-cols-1 gap-2">
             {actualData.circles.map((circle, idx) => (
               <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
-                <div className="grid grid-cols-3 gap-2 items-center">
+                <div className="grid grid-cols-4 gap-2 items-center">
                   <input
                     type="text"
                     value={circle.center}
@@ -1526,18 +1690,35 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                     className="w-full p-1 border rounded"
                     placeholder="반지름"
                   />
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={circle.showRadius || false}
-                      onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
-                      className="mr-1"
-                    />
-                    <span className="text-xs">반지름 표시</span>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={circle.showRadius || false}
+                        onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <span className="text-xs">직선</span>
+                    </div>
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={circle.showRadiusArc || false}
+                        onChange={(e) => handleCircleChange(idx, 'showRadiusArc', e.target.checked)}
+                        className="mr-1"
+                      />
+                      <span className="text-xs">호</span>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => handleDeleteCircle(idx)}
+                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                  >
+                    ×
+                  </button>
                 </div>
                 
-                <div className="grid grid-cols-4 gap-2 items-center mt-1">
+                <div className="grid grid-cols-3 gap-2 items-center mt-1">
                   <input
                     type="number"
                     value={circle.startAngle !== undefined ? circle.startAngle : ''}
@@ -1563,12 +1744,6 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                     />
                     <span className="text-xs">부채꼴</span>
                   </div>
-                  <button
-                    onClick={() => handleDeleteCircle(idx)}
-                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
-                  >
-                    ×
-                  </button>
                 </div>
                 
                 <div className="text-xs text-gray-500 mt-1">
