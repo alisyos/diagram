@@ -657,9 +657,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const svgAspectRatio = (width - 2 * padding) / (height - 2 * padding);
     
     // 원점(0,0)이 항상 중앙에 오도록 도메인 범위 조정
-    // 모눈종이 기준 5칸 정도로 표시되도록 도메인 크기 조정
-    const xDomainSize = Math.max(5, maxRange / 2) * svgAspectRatio;
-    const yDomainSize = Math.max(5, maxRange / 2);
+    // 모눈종이 기준 칸 수를 5에서 15로 증가시켜 더 넓은 영역 표시
+    const xDomainSize = Math.max(15, maxRange) * svgAspectRatio;
+    const yDomainSize = Math.max(15, maxRange);
     
     // 원점 중심으로 도메인 설정
     const xDomainMin = -xDomainSize / 2;
@@ -806,9 +806,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       // x축과 y축에 동일한 간격 적용
       const gridStep = 1; // 기본 그리드 간격 (실제 좌표 기준)
       
+      // 확대/축소 레벨에 따라 그리드 간격 조정
+      const adjustedGridStep = zoomLevel < 0.8 ? 5 : gridStep;
+      
       // x축 모눈선 그리기
       const xDomain = xScale.domain();
-      for (let x = Math.floor(xDomain[0]); x <= Math.ceil(xDomain[1]); x += gridStep) {
+      for (let x = Math.floor(xDomain[0] / adjustedGridStep) * adjustedGridStep; 
+           x <= Math.ceil(xDomain[1] / adjustedGridStep) * adjustedGridStep; 
+           x += adjustedGridStep) {
         gridGroup.append('line')
           .attr('x1', xScale(x))
           .attr('y1', padding)
@@ -831,7 +836,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       
       // y축 모눈선 그리기
       const yDomain = yScale.domain();
-      for (let y = Math.floor(yDomain[0]); y <= Math.ceil(yDomain[1]); y += gridStep) {
+      for (let y = Math.floor(yDomain[0] / adjustedGridStep) * adjustedGridStep; 
+           y <= Math.ceil(yDomain[1] / adjustedGridStep) * adjustedGridStep; 
+           y += adjustedGridStep) {
         gridGroup.append('line')
           .attr('x1', padding)
           .attr('y1', yScale(y))
