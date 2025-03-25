@@ -34,6 +34,8 @@ interface Circle {
   endAngle?: number; // 끝 각도 (도 단위, 0-360)
   showArc?: boolean; // 호를 표시할지 여부
   fillArc?: boolean; // 부채꼴로 채울지 여부
+  startPoint?: string; // 호의 시작점 (점 라벨)
+  endPoint?: string; // 호의 끝점 (점 라벨)
 }
 
 interface Curve {
@@ -577,6 +579,22 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const startAngle = angle - 90;
     const endAngle = startAngle + 180;
     
+    // 반원의 시작점과 끝점 계산
+    const startPointX = centerPoint.x + radius * Math.cos((startAngle * Math.PI) / 180);
+    const startPointY = centerPoint.y + radius * Math.sin((startAngle * Math.PI) / 180);
+    const endPointX = centerPoint.x + radius * Math.cos((endAngle * Math.PI) / 180);
+    const endPointY = centerPoint.y + radius * Math.sin((endAngle * Math.PI) / 180);
+    
+    // 시작점과 끝점을 추가
+    const startPointLabel = `${centerPoint.label}_start`;
+    const endPointLabel = `${centerPoint.label}_end`;
+    
+    const newPoints = [
+      ...actualData.points,
+      { label: startPointLabel, x: startPointX, y: startPointY, visible: true },
+      { label: endPointLabel, x: endPointX, y: endPointY, visible: true }
+    ];
+    
     const newCircle: Circle = {
       center: centerPoint.label,
       radius: radius,
@@ -584,11 +602,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       endAngle: endAngle,
       showArc: true,
       fillArc: true,
-      showRadius: true
+      showRadius: true,
+      startPoint: startPointLabel,
+      endPoint: endPointLabel
     };
     
     onDataChange({
       ...actualData,
+      points: newPoints,
       circles: [...actualData.circles, newCircle]
     });
   };
@@ -628,7 +649,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       endAngle: endAngle,
       showArc: true,
       fillArc: true,
-      showRadius: true
+      showRadius: true,
+      startPoint: startPoint.label,
+      endPoint: endPoint.label
     };
     
     onDataChange({
@@ -1286,10 +1309,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     // 원 그리기
     actualData.circles.forEach(circle => {
       const centerPoint = points.find(p => p.label === circle.center);
+      const startPointObj = circle.startPoint ? points.find(p => p.label === circle.startPoint) : null;
+      const endPointObj = circle.endPoint ? points.find(p => p.label === circle.endPoint) : null;
 
       if (centerPoint) {
         // 완전한 원인지 부채꼴/호인지 확인
-        const isFullCircle = circle.startAngle === undefined || circle.endAngle === undefined;
+        // 시작점과 끝점이 지정되어 있으면 항상 호로 처리
+        const isFullCircle = (!circle.startPoint && !circle.endPoint) && 
+                            (circle.startAngle === undefined || circle.endAngle === undefined);
         const isSemicircle = !isFullCircle && Math.abs(Math.abs(circle.endAngle! - circle.startAngle!) - 180) < 0.1;
         
         if (isFullCircle) {
@@ -1318,71 +1345,212 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const sweepFlag = circle.endAngle! > circle.startAngle! ? 1 : 0;
           
           // 원호의 시작점과 끝점 계산
-          const startX = centerPoint.x + circle.radius * Math.cos(startAngleRad);
-          const startY = centerPoint.y + circle.radius * Math.sin(startAngleRad);
-          const endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
-          const endY = centerPoint.y + circle.radius * Math.sin(endAngleRad);
-          
-          // D3의 arc 생성기 사용
-          const arcRadius = xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x);
-          
-          // 부채꼴과 반원에 대한 디스플레이 이름 설정
-          const displayName = isSemicircle ? '반원' : '부채꼴';
-          
-          // 부채꼴/호 그리기
-          if (circle.fillArc) {
-            // 채워진 부채꼴로 그리기
-            const arcGenerator = d3.arc()
-              .innerRadius(0)
-              .outerRadius(arcRadius)
-              .startAngle(startAngleRad)
-              .endAngle(endAngleRad);
+          let startX: number, startY: number, endX: number, endY: number;
+          let svgStartX: number, svgStartY: number, svgEndX: number, svgEndY: number;
+          let svgCenterX: number, svgCenterY: number;
+
+          svgCenterX = xScale(centerPoint.x);
+          svgCenterY = yScale(centerPoint.y);
+
+          if (startPointObj && endPointObj) {
+            // 지정된 점 사용
+            startX = startPointObj.x;
+            startY = startPointObj.y;
+            endX = endPointObj.x;
+            endY = endPointObj.y;
             
-            shapeGroup.append('path')
-              .attr('d', arcGenerator({} as any))
-              .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
-              .attr('fill', 'rgba(32, 201, 151, 0.3)')
-              .attr('stroke', '#20c997')
-              .attr('stroke-width', 2.5);
+            // 호의 양끝점까지의 거리 계산 (실제 반지름으로 사용)
+            const startRadius = Math.sqrt(
+              Math.pow(startX - centerPoint.x, 2) + 
+              Math.pow(startY - centerPoint.y, 2)
+            );
+            
+            const endRadius = Math.sqrt(
+              Math.pow(endX - centerPoint.x, 2) + 
+              Math.pow(endY - centerPoint.y, 2)
+            );
+            
+            // 두 반지름의 평균 사용 (더 안정적인 호 생성)
+            const avgRadius = (startRadius + endRadius) / 2;
+            
+            // 지정된 점을 기준으로 각도 계산
+            const startAngle = Math.atan2(startY - centerPoint.y, startX - centerPoint.x);
+            const endAngle = Math.atan2(endY - centerPoint.y, endX - centerPoint.x);
+            
+            // 삼각형 방향 확인 (외적 사용)
+            // v1 = 중심점에서 시작점으로의 벡터
+            // v2 = 중심점에서 끝점으로의 벡터
+            const v1x = startX - centerPoint.x;
+            const v1y = startY - centerPoint.y;
+            const v2x = endX - centerPoint.x;
+            const v2y = endY - centerPoint.y;
+
+            // 외적(cross product)으로 방향 확인
+            // 양수: 반시계 방향, 음수: 시계 방향
+            const crossProduct = v1x * v2y - v1y * v2x;
+
+            // 각도의 차이 계산
+            let angleDiff = endAngle - startAngle;
+
+            // 각도 차이가 180도(π)를 넘으면 조정
+            if (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            if (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+
+            // 큰 호인지 여부 결정
+            const largeArcFlag = Math.abs(angleDiff) > Math.PI ? 1 : 0;
+
+            // 시계 방향인지 결정 - 외적 값에 따라 결정
+            const sweepFlag = crossProduct > 0 ? 0 : 1;
+
+            // SVG 좌표로 변환
+            svgStartX = xScale(startX);
+            svgStartY = yScale(startY);
+            svgEndX = xScale(endX);
+            svgEndY = yScale(endY);
+            
+            // SVG 반지름 계산 (화면 좌표 기준)
+            const svgRadius = xScale(centerPoint.x + avgRadius) - xScale(centerPoint.x);
+            
+            if (circle.fillArc) {
+              // 부채꼴로 그리기 (정확한 SVG path 사용)
+              // M: 시작점, A: 호, L: 중심점으로 직선
+              const pathData = `M ${svgStartX},${svgStartY} A ${svgRadius},${svgRadius} 0 ${largeArcFlag} ${sweepFlag} ${svgEndX},${svgEndY} L ${svgCenterX},${svgCenterY} Z`;
+              
+              shapeGroup.append('path')
+                .attr('d', pathData)
+                .attr('fill', 'rgba(32, 201, 151, 0.3)')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2.5);
+            } else {
+              // 호만 그리기
+              const pathData = `M ${svgStartX},${svgStartY} A ${svgRadius},${svgRadius} 0 ${largeArcFlag} ${sweepFlag} ${svgEndX},${svgEndY}`;
+              
+              shapeGroup.append('path')
+                .attr('d', pathData)
+                .attr('fill', 'none')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2.5);
+            }
+            
+            // 연결선 표시 - 호의 점들을 특별한 색상으로 강조하여 시각화
+            if (startPointObj.visible !== false) {
+              // 시작점 표시
+              shapeGroup.append('circle')
+                .attr('cx', svgStartX)
+                .attr('cy', svgStartY)
+                .attr('r', 3)
+                .attr('fill', '#20c997')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 1.5);
+            }
+            
+            if (endPointObj.visible !== false) {
+              // 끝점 표시
+              shapeGroup.append('circle')
+                .attr('cx', svgEndX)
+                .attr('cy', svgEndY)
+                .attr('r', 3)
+                .attr('fill', '#20c997')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 1.5);
+            }
+            
+            // 중심점에서 시작점과 끝점으로 선 그리기
+            if (circle.fillArc) {
+              // 시작점 연결선
+              shapeGroup.append('line')
+                .attr('x1', svgCenterX)
+                .attr('y1', svgCenterY)
+                .attr('x2', svgStartX)
+                .attr('y2', svgStartY)
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2);
+              
+              // 끝점 연결선
+              shapeGroup.append('line')
+                .attr('x1', svgCenterX)
+                .attr('y1', svgCenterY)
+                .attr('x2', svgEndX)
+                .attr('y2', svgEndY)
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2);
+            }
           } else {
-            // 호만 그리기
-            const arcGenerator = d3.arc()
-              .innerRadius(arcRadius)
-              .outerRadius(arcRadius)
-              .startAngle(startAngleRad)
-              .endAngle(endAngleRad);
+            // 지정된 점이 없는 경우(기존 각도 사용)
+            startX = centerPoint.x + circle.radius * Math.cos(startAngleRad);
+            startY = centerPoint.y + circle.radius * Math.sin(startAngleRad);
+            endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
+            endY = centerPoint.y + circle.radius * Math.sin(endAngleRad);
             
-            shapeGroup.append('path')
-              .attr('d', arcGenerator({} as any))
-              .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
-              .attr('fill', 'none')
-              .attr('stroke', '#20c997')
-              .attr('stroke-width', 2.5);
-          }
-          
-          // 부채꼴의 경우 중심에서 호의 양 끝점까지 선 그리기
-          if (circle.fillArc) {
-            // 시작점 연결선
-            shapeGroup.append('line')
-              .attr('x1', xScale(centerPoint.x))
-              .attr('y1', yScale(centerPoint.y))
-              .attr('x2', xScale(startX))
-              .attr('y2', yScale(startY))
-              .attr('stroke', '#20c997')
-              .attr('stroke-width', 2);
+            svgStartX = xScale(startX);
+            svgStartY = yScale(startY);
+            svgEndX = xScale(endX);
+            svgEndY = yScale(endY);
             
-            // 끝점 연결선
-            shapeGroup.append('line')
-              .attr('x1', xScale(centerPoint.x))
-              .attr('y1', yScale(centerPoint.y))
-              .attr('x2', xScale(endX))
-              .attr('y2', yScale(endY))
-              .attr('stroke', '#20c997')
-              .attr('stroke-width', 2);
+            // SVG 반지름 계산 (화면 좌표 기준)
+            const svgRadius = xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x);
+            
+            // SVG 중심점 좌표
+            const svgCenterX = xScale(centerPoint.x);
+            const svgCenterY = yScale(centerPoint.y);
+            
+            // 각도의 차이 계산 (도 단위)
+            const angleDiff = circle.endAngle! - circle.startAngle!;
+            
+            // 큰 호인지 여부 결정
+            const largeArcFlag = Math.abs(angleDiff) > 180 ? 1 : 0;
+            
+            // 시계 방향인지 결정
+            const sweepFlag = angleDiff > 0 ? 1 : 0;
+            
+            if (circle.fillArc) {
+              // 부채꼴로 그리기 (정확한 SVG path 사용)
+              // M: 시작점, A: 호, L: 중심점으로 직선
+              const pathData = `M ${svgStartX},${svgStartY} A ${svgRadius},${svgRadius} 0 ${largeArcFlag} ${sweepFlag} ${svgEndX},${svgEndY} L ${svgCenterX},${svgCenterY} Z`;
+              
+              shapeGroup.append('path')
+                .attr('d', pathData)
+                .attr('fill', 'rgba(32, 201, 151, 0.3)')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2.5);
+            } else {
+              // 호만 그리기
+              const pathData = `M ${svgStartX},${svgStartY} A ${svgRadius},${svgRadius} 0 ${largeArcFlag} ${sweepFlag} ${svgEndX},${svgEndY}`;
+              
+              shapeGroup.append('path')
+                .attr('d', pathData)
+                .attr('fill', 'none')
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2.5);
+            }
+            
+            // 중심점에서 시작점과 끝점으로 선 그리기
+            if (circle.fillArc) {
+              // 시작점 연결선
+              shapeGroup.append('line')
+                .attr('x1', svgCenterX)
+                .attr('y1', svgCenterY)
+                .attr('x2', svgStartX)
+                .attr('y2', svgStartY)
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2);
+              
+              // 끝점 연결선
+              shapeGroup.append('line')
+                .attr('x1', svgCenterX)
+                .attr('y1', svgCenterY)
+                .attr('x2', svgEndX)
+                .attr('y2', svgEndY)
+                .attr('stroke', '#20c997')
+                .attr('stroke-width', 2);
+            }
           }
           
           // 반원이나 부채꼴의 이름 표시
-          const midAngleRad = (startAngleRad + endAngleRad) / 2;
+          const midAngleRad = startPointObj && endPointObj 
+            ? (Math.atan2(startY - centerPoint.y, startX - centerPoint.x) + Math.atan2(endY - centerPoint.y, endX - centerPoint.x)) / 2
+            : (startAngleRad + endAngleRad) / 2;
+          
           const labelX = centerPoint.x + circle.radius * 0.7 * Math.cos(midAngleRad);
           const labelY = centerPoint.y + circle.radius * 0.7 * Math.sin(midAngleRad);
           
@@ -1390,7 +1558,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             shapeGroup,
             labelX,
             labelY,
-            displayName,
+            isSemicircle ? '반원' : '부채꼴',
             {
               fontSize: '12px',
               fill: '#20c997',
@@ -1977,10 +2145,45 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                     </div>
                   )}
 
+                  {/* 호의 시작점과 끝점 설정 추가 */}
+                  {(typeText === '부채꼴' || typeText === '반원') && (
+                    <div className="grid grid-cols-3 gap-2 items-center mt-1">
+                      <select
+                        value={circle.startPoint || ''}
+                        onChange={(e) => handleCircleChange(idx, 'startPoint', e.target.value)}
+                        className="w-full p-1 border rounded"
+                      >
+                        <option value="">시작점 선택</option>
+                        {actualData.points.map(point => (
+                          <option key={`start-${point.label}`} value={point.label}>
+                            {point.label}
+                          </option>
+                        ))}
+                      </select>
+                      <select
+                        value={circle.endPoint || ''}
+                        onChange={(e) => handleCircleChange(idx, 'endPoint', e.target.value)}
+                        className="w-full p-1 border rounded"
+                      >
+                        <option value="">끝점 선택</option>
+                        {actualData.points.map(point => (
+                          <option key={`end-${point.label}`} value={point.label}>
+                            {point.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex items-center">
+                        <span className="text-xs">호점 지정</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="text-xs text-gray-500 mt-1">
                     {typeText} {circle.center}: 반지름 {circle.radius.toFixed(2)}
                     {(typeText === '부채꼴' || typeText === '반원') && 
                       ` (${circle.startAngle?.toFixed(0)}° ~ ${circle.endAngle?.toFixed(0)}°)`}
+                    {circle.startPoint && circle.endPoint && 
+                      ` [${circle.startPoint} → ${circle.endPoint}]`}
                   </div>
                 </div>
               );
