@@ -218,12 +218,22 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     if (!onDataChange) return;
     
     const newCircles = [...actualData.circles];
-    if (field === 'center') {
+    if (field === 'center' || field === 'startPoint' || field === 'endPoint') {
       newCircles[index] = { ...newCircles[index], [field]: value as string };
+      
+      // startPoint나 endPoint가 설정되면 자동으로 showArc를 true로 설정
+      if ((field === 'startPoint' || field === 'endPoint') && value) {
+        newCircles[index].showArc = true;
+      }
     } else if (field === 'radius' || field === 'startAngle' || field === 'endAngle') {
       const numValue = typeof value === 'string' ? parseFloat(value) : value as number;
       if (!isNaN(numValue)) {
         newCircles[index] = { ...newCircles[index], [field]: numValue };
+        
+        // startAngle이나 endAngle이 설정되면 자동으로 showArc를 true로 설정
+        if ((field === 'startAngle' || field === 'endAngle') && numValue !== undefined) {
+          newCircles[index].showArc = true;
+        }
       }
     } else if (field === 'showRadius' || field === 'showRadiusArc' || field === 'showArc' || field === 'fillArc') {
       newCircles[index] = { ...newCircles[index], [field]: value as boolean };
@@ -282,7 +292,11 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       center: actualData.points[0].label,
       radius: 3.0, // 기본 반지름을 1.0에서 3.0으로 증가
       showRadius: true, // 반지름 표시를 기본으로 활성화
-      showRadiusArc: false // 반지름 호 표시는 기본적으로 비활성화
+      showRadiusArc: false, // 반지름 호 표시는 기본적으로 비활성화
+      showArc: true, // 호를 표시할지 여부
+      fillArc: true, // 부채꼴로 채울지 여부
+      startPoint: actualData.points[0].label, // 호의 시작점 (점 라벨)
+      endPoint: actualData.points[0].label // 호의 끝점 (점 라벨)
     };
     
     onDataChange({
@@ -1314,10 +1328,10 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
 
       if (centerPoint) {
         // 완전한 원인지 부채꼴/호인지 확인
-        // 시작점과 끝점이 지정되어 있으면 항상 호로 처리
-        const isFullCircle = (!circle.startPoint && !circle.endPoint) && 
-                            (circle.startAngle === undefined || circle.endAngle === undefined);
-        const isSemicircle = !isFullCircle && Math.abs(Math.abs(circle.endAngle! - circle.startAngle!) - 180) < 0.1;
+        // 시작점이나 끝점이 설정되어 있거나, showArc가 true이고 시작/끝 각도가 설정되어 있으면 부채꼴/호로 처리
+        const isFullCircle = !circle.showArc || 
+                             ((!circle.startPoint && !circle.endPoint) && 
+                             (circle.startAngle === undefined || circle.endAngle === undefined));
         
         if (isFullCircle) {
           // 완전한 원 그리기
@@ -1558,7 +1572,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             shapeGroup,
             labelX,
             labelY,
-            isSemicircle ? '반원' : '부채꼴',
+            isFullCircle ? '완전한 원' : '부채꼴',
             {
               fontSize: '12px',
               fill: '#20c997',
