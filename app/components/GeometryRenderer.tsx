@@ -555,6 +555,88 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     setRotation(0);
   };
 
+  // 반원 추가 핸들러
+  const handleAddSemicircle = () => {
+    if (!onDataChange || actualData.points.length < 2) return;
+    
+    // 두 점으로 반원 생성 (첫번째 점: 중심, 두번째 점: 지름 끝점)
+    const centerPoint = actualData.points[0];
+    const diameterPoint = actualData.points[1];
+    
+    // 반지름 계산
+    const dx = diameterPoint.x - centerPoint.x;
+    const dy = diameterPoint.y - centerPoint.y;
+    const radius = Math.sqrt(dx * dx + dy * dy);
+    
+    // 각도 계산 (두 점이 이루는 각도)
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    
+    // 반원은 각도가 180도인 부채꼴
+    // 시작 각도는 계산된 각도에서 90도 뺀 값
+    // 끝 각도는 시작 각도 + 180도
+    const startAngle = angle - 90;
+    const endAngle = startAngle + 180;
+    
+    const newCircle: Circle = {
+      center: centerPoint.label,
+      radius: radius,
+      startAngle: startAngle,
+      endAngle: endAngle,
+      showArc: true,
+      fillArc: true,
+      showRadius: true
+    };
+    
+    onDataChange({
+      ...actualData,
+      circles: [...actualData.circles, newCircle]
+    });
+  };
+
+  // 부채꼴 추가 핸들러
+  const handleAddSector = () => {
+    if (!onDataChange || actualData.points.length < 3) return;
+    
+    // 세 점으로 부채꼴 생성 (첫번째 점: 중심, 두번째 점과 세번째 점: 부채꼴의 경계)
+    const centerPoint = actualData.points[0];
+    const startPoint = actualData.points[1];
+    const endPoint = actualData.points[2];
+    
+    // 반지름 계산 (첫번째 점과 두번째 점 사이의 거리)
+    const radius = Math.sqrt(
+      Math.pow(startPoint.x - centerPoint.x, 2) + 
+      Math.pow(startPoint.y - centerPoint.y, 2)
+    );
+    
+    // 시작 각도 계산 (중심점에서 시작점까지의 각도)
+    const startAngle = Math.atan2(
+      startPoint.y - centerPoint.y,
+      startPoint.x - centerPoint.x
+    ) * 180 / Math.PI;
+    
+    // 끝 각도 계산 (중심점에서 끝점까지의 각도)
+    const endAngle = Math.atan2(
+      endPoint.y - centerPoint.y,
+      endPoint.x - centerPoint.x
+    ) * 180 / Math.PI;
+    
+    // 부채꼴 객체 생성
+    const newCircle: Circle = {
+      center: centerPoint.label,
+      radius: radius,
+      startAngle: startAngle,
+      endAngle: endAngle,
+      showArc: true,
+      fillArc: true,
+      showRadius: true
+    };
+    
+    onDataChange({
+      ...actualData,
+      circles: [...actualData.circles, newCircle]
+    });
+  };
+
   useEffect(() => {
     if (!svgRef.current) return;
 
@@ -1208,6 +1290,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       if (centerPoint) {
         // 완전한 원인지 부채꼴/호인지 확인
         const isFullCircle = circle.startAngle === undefined || circle.endAngle === undefined;
+        const isSemicircle = !isFullCircle && Math.abs(Math.abs(circle.endAngle! - circle.startAngle!) - 180) < 0.1;
         
         if (isFullCircle) {
           // 완전한 원 그리기
@@ -1217,52 +1300,103 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             .attr('r', xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
             .attr('fill', 'none')
             .attr('stroke', '#20c997')
-            .attr('stroke-width', 1.5); // 선 두께를 2에서 2.5로 증가
+            .attr('stroke-width', 2.5);
         } else {
           // 부채꼴/호 그리기
           const startAngleRad = ((circle.startAngle || 0) * Math.PI) / 180;
           const endAngleRad = ((circle.endAngle || 0) * Math.PI) / 180;
           
+          // SVG 좌표계에서는 0도가 동쪽(3시)이고 시계 방향이 아닌 반시계 방향으로 각도가 증가
+          // 수학에서의 각도와 SVG 각도의 차이를 처리
+          
+          // 큰 호(large-arc)인지 결정 (도형 사이의 각도가 180도 이상인 경우)
+          const angleDiff = Math.abs(circle.endAngle! - circle.startAngle!);
+          const largeArcFlag = angleDiff > 180 ? 1 : 0;
+          
+          // 시계 방향(sweep)인지 결정
+          // SVG에서는 반시계 방향이 양수, 시계 방향이 음수인데 반대로 해줘야 함
+          const sweepFlag = circle.endAngle! > circle.startAngle! ? 1 : 0;
+          
+          // 원호의 시작점과 끝점 계산
+          const startX = centerPoint.x + circle.radius * Math.cos(startAngleRad);
+          const startY = centerPoint.y + circle.radius * Math.sin(startAngleRad);
+          const endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
+          const endY = centerPoint.y + circle.radius * Math.sin(endAngleRad);
+          
           // D3의 arc 생성기 사용
-          const arcGenerator = d3.arc()
-            .innerRadius(0)
-            .outerRadius(xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x))
-            .startAngle(startAngleRad)
-            .endAngle(endAngleRad);
+          const arcRadius = xScale(centerPoint.x + circle.radius) - xScale(centerPoint.x);
           
-          shapeGroup.append('path')
-            .attr('d', arcGenerator({} as any))
-            .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
-            .attr('fill', circle.fillArc ? 'rgba(32, 201, 151, 0.3)' : 'none') // 투명도를 0.2에서 0.3으로 증가
-            .attr('stroke', '#20c997')
-            .attr('stroke-width', 1.5); // 선 두께를 2에서 2.5로 증가
+          // 부채꼴과 반원에 대한 디스플레이 이름 설정
+          const displayName = isSemicircle ? '반원' : '부채꼴';
           
-          // 호의 시작점과 끝점을 중심과 연결하는 선 (부채꼴인 경우)
+          // 부채꼴/호 그리기
+          if (circle.fillArc) {
+            // 채워진 부채꼴로 그리기
+            const arcGenerator = d3.arc()
+              .innerRadius(0)
+              .outerRadius(arcRadius)
+              .startAngle(startAngleRad)
+              .endAngle(endAngleRad);
+            
+            shapeGroup.append('path')
+              .attr('d', arcGenerator({} as any))
+              .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
+              .attr('fill', 'rgba(32, 201, 151, 0.3)')
+              .attr('stroke', '#20c997')
+              .attr('stroke-width', 2.5);
+          } else {
+            // 호만 그리기
+            const arcGenerator = d3.arc()
+              .innerRadius(arcRadius)
+              .outerRadius(arcRadius)
+              .startAngle(startAngleRad)
+              .endAngle(endAngleRad);
+            
+            shapeGroup.append('path')
+              .attr('d', arcGenerator({} as any))
+              .attr('transform', `translate(${xScale(centerPoint.x)}, ${yScale(centerPoint.y)})`)
+              .attr('fill', 'none')
+              .attr('stroke', '#20c997')
+              .attr('stroke-width', 2.5);
+          }
+          
+          // 부채꼴의 경우 중심에서 호의 양 끝점까지 선 그리기
           if (circle.fillArc) {
             // 시작점 연결선
-            const startX = centerPoint.x + circle.radius * Math.cos(startAngleRad);
-            const startY = centerPoint.y + circle.radius * Math.sin(startAngleRad);
-            
             shapeGroup.append('line')
               .attr('x1', xScale(centerPoint.x))
               .attr('y1', yScale(centerPoint.y))
               .attr('x2', xScale(startX))
               .attr('y2', yScale(startY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 1.5); // 선 두께를 1.5에서 2로 증가
+              .attr('stroke-width', 2);
             
             // 끝점 연결선
-            const endX = centerPoint.x + circle.radius * Math.cos(endAngleRad);
-            const endY = centerPoint.y + circle.radius * Math.sin(endAngleRad);
-            
             shapeGroup.append('line')
               .attr('x1', xScale(centerPoint.x))
               .attr('y1', yScale(centerPoint.y))
               .attr('x2', xScale(endX))
               .attr('y2', yScale(endY))
               .attr('stroke', '#20c997')
-              .attr('stroke-width', 1.5); // 선 두께를 1.5에서 2로 증가
+              .attr('stroke-width', 2);
           }
+          
+          // 반원이나 부채꼴의 이름 표시
+          const midAngleRad = (startAngleRad + endAngleRad) / 2;
+          const labelX = centerPoint.x + circle.radius * 0.7 * Math.cos(midAngleRad);
+          const labelY = centerPoint.y + circle.radius * 0.7 * Math.sin(midAngleRad);
+          
+          createNonFlippedText(
+            shapeGroup,
+            labelX,
+            labelY,
+            displayName,
+            {
+              fontSize: '12px',
+              fill: '#20c997',
+              fontWeight: 'bold'
+            }
+          );
         }
         
         // 반지름 표시
@@ -1738,95 +1872,119 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         
         <div>
           <div className="flex justify-between items-center mb-2">
-            <h3 className="font-bold">원:</h3>
-            <button
-              onClick={handleAddCircle}
-              className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
-              disabled={actualData.points.length < 1}
-            >
-              원 추가
-            </button>
+            <h3 className="font-bold">원과 부채꼴:</h3>
+            <div className="flex space-x-2">
+              <button
+                onClick={handleAddCircle}
+                className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+                disabled={actualData.points.length < 1}
+              >
+                원 추가
+              </button>
+              <button
+                onClick={handleAddSemicircle}
+                className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+                disabled={actualData.points.length < 2}
+              >
+                반원 추가
+              </button>
+              <button
+                onClick={handleAddSector}
+                className="bg-blue-500 text-white px-2 py-1 rounded text-sm hover:bg-blue-600"
+                disabled={actualData.points.length < 3}
+              >
+                부채꼴 추가
+              </button>
+            </div>
           </div>
           <div className="grid grid-cols-1 gap-2">
-            {actualData.circles.map((circle, idx) => (
-              <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
-                <div className="grid grid-cols-4 gap-2 items-center">
-                  <input
-                    type="text"
-                    value={circle.center}
-                    onChange={(e) => handleCircleChange(idx, 'center', e.target.value)}
-                    className="w-full p-1 border rounded text-center"
-                    placeholder="중심점"
-                  />
-                  <input
-                    type="number"
-                    value={circle.radius}
-                    onChange={(e) => handleCircleChange(idx, 'radius', e.target.value)}
-                    step="0.1"
-                    className="w-full p-1 border rounded"
-                    placeholder="반지름"
-                  />
-                  <div className="flex items-center space-x-2">
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={circle.showRadius || false}
-                        onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
-                        className="mr-1"
-                      />
-                      <span className="text-xs">직선</span>
-                    </div>
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        checked={circle.showRadiusArc || false}
-                        onChange={(e) => handleCircleChange(idx, 'showRadiusArc', e.target.checked)}
-                        className="mr-1"
-                      />
-                      <span className="text-xs">호</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCircle(idx)}
-                    className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
-                  >
-                    ×
-                  </button>
-                </div>
-                
-                <div className="grid grid-cols-3 gap-2 items-center mt-1">
-                  <input
-                    type="number"
-                    value={circle.startAngle !== undefined ? circle.startAngle : ''}
-                    onChange={(e) => handleCircleChange(idx, 'startAngle', e.target.value)}
-                    step="5"
-                    className="w-full p-1 border rounded"
-                    placeholder="시작 각도"
-                  />
-                  <input
-                    type="number"
-                    value={circle.endAngle !== undefined ? circle.endAngle : ''}
-                    onChange={(e) => handleCircleChange(idx, 'endAngle', e.target.value)}
-                    step="5"
-                    className="w-full p-1 border rounded"
-                    placeholder="끝 각도"
-                  />
-                  <div className="flex items-center">
+            {actualData.circles.map((circle, idx) => {
+              // 원인지 부채꼴인지 반원인지 구분
+              let typeText = '원';
+              if (circle.startAngle !== undefined && circle.endAngle !== undefined) {
+                if (Math.abs(Math.abs(circle.endAngle - circle.startAngle) - 180) < 0.1) {
+                  typeText = '반원';
+                } else {
+                  typeText = '부채꼴';
+                }
+              }
+              
+              return (
+                <div key={idx} className="bg-white p-2 rounded grid grid-cols-1 gap-2">
+                  <div className="grid grid-cols-4 gap-2 items-center">
                     <input
-                      type="checkbox"
-                      checked={circle.fillArc || false}
-                      onChange={(e) => handleCircleChange(idx, 'fillArc', e.target.checked)}
-                      className="mr-1"
+                      type="text"
+                      value={circle.center}
+                      onChange={(e) => handleCircleChange(idx, 'center', e.target.value)}
+                      className="w-full p-1 border rounded text-center"
+                      placeholder="중심점"
                     />
-                    <span className="text-xs">부채꼴</span>
+                    <input
+                      type="number"
+                      value={circle.radius}
+                      onChange={(e) => handleCircleChange(idx, 'radius', e.target.value)}
+                      step="0.1"
+                      className="w-full p-1 border rounded"
+                      placeholder="반지름"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={circle.showRadius || false}
+                          onChange={(e) => handleCircleChange(idx, 'showRadius', e.target.checked)}
+                          className="mr-1"
+                        />
+                        <span className="text-xs">반지름</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteCircle(idx)}
+                      className="w-6 h-6 text-red-500 hover:text-red-600 font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  
+                  {/* 부채꼴/반원인 경우 각도 설정 표시 */}
+                  {(typeText === '부채꼴' || typeText === '반원') && (
+                    <div className="grid grid-cols-3 gap-2 items-center mt-1">
+                      <input
+                        type="number"
+                        value={circle.startAngle !== undefined ? circle.startAngle : ''}
+                        onChange={(e) => handleCircleChange(idx, 'startAngle', e.target.value)}
+                        step="5"
+                        className="w-full p-1 border rounded"
+                        placeholder="시작 각도"
+                      />
+                      <input
+                        type="number"
+                        value={circle.endAngle !== undefined ? circle.endAngle : ''}
+                        onChange={(e) => handleCircleChange(idx, 'endAngle', e.target.value)}
+                        step="5"
+                        className="w-full p-1 border rounded"
+                        placeholder="끝 각도"
+                      />
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={circle.fillArc || false}
+                          onChange={(e) => handleCircleChange(idx, 'fillArc', e.target.checked)}
+                          className="mr-1"
+                        />
+                        <span className="text-xs">채우기</span>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="text-xs text-gray-500 mt-1">
+                    {typeText} {circle.center}: 반지름 {circle.radius.toFixed(2)}
+                    {(typeText === '부채꼴' || typeText === '반원') && 
+                      ` (${circle.startAngle?.toFixed(0)}° ~ ${circle.endAngle?.toFixed(0)}°)`}
                   </div>
                 </div>
-                
-                <div className="text-xs text-gray-500 mt-1">
-                  {formatCircle(circle)}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         
