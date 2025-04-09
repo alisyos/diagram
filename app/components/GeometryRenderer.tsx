@@ -187,6 +187,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     if (!onDataChange) return;
     
     const newLines = [...actualData.lines];
+    
     if (property === 'showLength' || property === 'showLengthArc') {
       newLines[lineIndex] = {
         ...newLines[lineIndex],
@@ -206,6 +207,21 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
         ...newLines[lineIndex],
         arcDirection: value as 'left' | 'right'
       };
+    } else if (property === 'start' || property === 'end') {
+      // 시작점 및 끝점 라벨 설정
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        [property]: value
+      };
+    } else if (property === 'length') {
+      // 길이 설정
+      const length = parseFloat(value);
+      if (!isNaN(length)) {
+        newLines[lineIndex] = {
+          ...newLines[lineIndex],
+          length
+        };
+      }
     }
     
     onDataChange({
@@ -2151,7 +2167,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                   <div className="flex items-center">
                     <input
                       type="checkbox"
-                      checked={line.showLengthArc || true}
+                      checked={Boolean(line.showLengthArc)}
                       onChange={(e) => handleLineChange(idx, 'showLengthArc', e.target.checked)}
                       className="mr-1"
                     />
