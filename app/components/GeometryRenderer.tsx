@@ -12,8 +12,11 @@ interface Line {
   start: string;
   end: string;
   length?: number;
+  isMeasurement?: boolean;
   showLength?: boolean;
-  showLengthArc?: boolean; // 길이를 호로 표시할지 여부
+  showLengthArc?: boolean;
+  arcSize?: number;
+  arcDirection?: 'left' | 'right';
 }
 
 interface Angle {
@@ -115,6 +118,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 }); // 패닝 오프셋 상태
   const [isDragging, setIsDragging] = useState(false); // 드래그 중인지 여부
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 }); // 드래그 시작 위치
+  const [showArcDialog, setShowArcDialog] = useState(false);
+  const [editingLineId, setEditingLineId] = useState('');
   
   // 초기 데이터가 없는 경우 사용할 기본 데이터
   const defaultData: GeometryData = {
@@ -178,22 +183,35 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     onDataChange({ ...actualData, points: newPoints });
   };
 
-  const handleLineChange = (index: number, field: keyof Line, value: string | boolean) => {
+  const handleLineChange = (lineIndex: number, property: string, value: any) => {
     if (!onDataChange) return;
     
     const newLines = [...actualData.lines];
-    if (field === 'start' || field === 'end') {
-      newLines[index] = { ...newLines[index], [field]: value as string };
-    } else if (field === 'length' && typeof value === 'string') {
-      const numValue = parseFloat(value);
-      if (!isNaN(numValue)) {
-        newLines[index] = { ...newLines[index], length: numValue };
+    if (property === 'showLength' || property === 'showLengthArc') {
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        [property]: value
+      };
+    } else if (property === 'arcSize') {
+      // arcSize 값이 0.1과 1 사이인지 확인
+      const arcSize = parseFloat(value);
+      if (!isNaN(arcSize) && arcSize >= 0.1 && arcSize <= 1) {
+        newLines[lineIndex] = {
+          ...newLines[lineIndex],
+          arcSize
+        };
       }
-    } else if (field === 'showLength' || field === 'showLengthArc') {
-      newLines[index] = { ...newLines[index], [field]: value as boolean };
+    } else if (property === 'arcDirection') {
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        arcDirection: value as 'left' | 'right'
+      };
     }
     
-    onDataChange({ ...actualData, lines: newLines });
+    onDataChange({
+      ...actualData,
+      lines: newLines
+    });
   };
 
   const handleAngleChange = (index: number, field: keyof Angle, value: string | boolean) => {
@@ -273,8 +291,10 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     const newLine: Line = {
       start: startPoint.label,
       end: endPoint.label,
-      showLength: true,
-      showLengthArc: false,
+      showLength: false,
+      showLengthArc: true,
+      arcSize: 0.2,
+      arcDirection: 'right',
       length: distance > 0 ? distance : 5 // 실제 거리가 있으면 그 값을, 없으면 기본값 5 사용
     };
     
@@ -1129,12 +1149,16 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           const dirX = dx / distance;
           const dirY = dy / distance;
           
-          // 선분에 수직인 벡터 계산 (시계 방향으로 90도 회전)
-          const perpX = dirY;
-          const perpY = -dirX;
+          // 선분에 수직인 벡터 계산 (시계/반시계 방향으로 90도 회전)
+          // 기본값은 오른쪽(시계 방향)이지만 사용자가 'left'를 선택하면 반시계 방향
+          const direction = line.arcDirection || 'right';
+          const perpX = direction === 'right' ? dirY : -dirY;
+          const perpY = direction === 'right' ? -dirX : dirX;
           
-          // 호의 높이 계산 (선분 길이의 약 15%)
-          const arcHeight = distance * 0.15;
+          // 호의 높이 계산 (선분 길이의 일정 비율)
+          // 사용자가 지정한 크기 또는 기본값 0.2 사용
+          const arcSize = line.arcSize || 0.2;
+          const arcHeight = distance * arcSize;
           
           // 호의 제어점 (선분의 중점에서 수직 방향으로 이동)
           const controlX = midX + perpX * arcHeight;
@@ -1145,21 +1169,158 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                             Q ${xScale(controlX)} ${yScale(controlY)}, 
                             ${xScale(endPoint.x)} ${yScale(endPoint.y)}`;
           
-          shapeGroup.append('path')
+          // 호 그리기
+          const arcPath = shapeGroup.append('path')
             .attr('d', pathData)
             .attr('fill', 'none')
             .attr('stroke', '#adb5bd')
             .attr('stroke-width', 1.5)
-            .attr('stroke-dasharray', '4');
+            .attr('stroke-dasharray', '4')
+            .attr('data-line-index', line.start + '-' + line.end)
+            .attr('class', 'arc-path')
+            .attr('cursor', 'move') // 마우스 커서를 move로 변경
+            .style('pointer-events', 'stroke'); // stroke 영역에서만 이벤트 발생
           
           // 길이 값 표시 (제어점 위치에)
-          createNonFlippedText(
+          const arcText = createNonFlippedText(
             shapeGroup, 
             controlX, 
             controlY - 0.2,
             formatNumber(line.length), 
             { fill: '#495057', fontSize: '13px', fontWeight: 'bold' }
           );
+          
+          // 텍스트에 클래스와 라인 ID 추가
+          arcText.classed('arc-length', true)
+                 .attr('data-line-id', line.start + '-' + line.end)
+                 .style('cursor', 'pointer')
+                 .on('click', () => {
+                   // 현재 라인의 ID를 저장
+                   setEditingLineId(line.start + '-' + line.end);
+                   // 대화상자 표시
+                   setShowArcDialog(true);
+                 });
+          
+          // 제어점 추가 (드래그 가능하지만 보이지 않음)
+          const controlPoint = shapeGroup.append('circle')
+            .attr('cx', xScale(controlX))
+            .attr('cy', yScale(controlY))
+            .attr('r', 5)
+            .attr('fill', 'rgba(0,0,0,0)') // 완전 투명하게 설정
+            .attr('stroke', 'rgba(0,0,0,0)') // 테두리도 투명하게
+            .attr('stroke-width', 1)
+            .attr('opacity', 0) // 완전히 보이지 않게
+            .attr('cursor', 'move')
+            .attr('data-line-index', line.start + '-' + line.end);
+            
+          // 특정 라벨로 점 가져오는 헬퍼 함수
+          const getPointByLabel = (label: string) => {
+            return actualData.points.find(p => p.label === label);
+          };
+          
+          // 호에 드래그 이벤트 추가 (호 자체 드래그 가능)
+          arcPath.call(d3.drag<SVGPathElement, unknown>()
+            .on('start', function() {
+              d3.select(this).attr('stroke', '#666');
+            })
+            .on('drag', function(event) {
+              // 드래그 이벤트에서 마우스 위치 가져오기
+              const svgX = event.x;
+              const svgY = event.y;
+              
+              // SVG 좌표를 데이터 좌표로 변환
+              const dataX = xScale.invert(svgX);
+              const dataY = yScale.invert(svgY);
+              
+              // 라인 시작점과 끝점
+              const lineId = d3.select(this).attr('data-line-index');
+              if (!lineId) return;
+              
+              const [startLabel, endLabel] = lineId.split('-');
+              const startPoint = getPointByLabel(startLabel);
+              const endPoint = getPointByLabel(endLabel);
+              
+              if (!startPoint || !endPoint) return;
+              
+              // 선분 벡터 계산
+              const lineVecX = endPoint.x - startPoint.x;
+              const lineVecY = endPoint.y - startPoint.y;
+              const lineLength = Math.sqrt(lineVecX * lineVecX + lineVecY * lineVecY);
+              
+              // 선분의 중점
+              const midX = (startPoint.x + endPoint.x) / 2;
+              const midY = (startPoint.y + endPoint.y) / 2;
+              
+              // 제어점에서 중점까지의 벡터
+              const controlVecX = dataX - midX;
+              const controlVecY = dataY - midY;
+              const controlDistance = Math.sqrt(controlVecX * controlVecX + controlVecY * controlVecY);
+              
+              // 선분의 방향 단위 벡터
+              const lineUnitVecX = lineVecX / lineLength;
+              const lineUnitVecY = lineVecY / lineLength;
+              
+              // 선분에 수직인 단위 벡터
+              const perpUnitVecX = -lineUnitVecY;
+              const perpUnitVecY = lineUnitVecX;
+              
+              // 제어점 벡터와 수직 벡터의 내적 (양수면 오른쪽, 음수면 왼쪽)
+              const dotProduct = controlVecX * perpUnitVecX + controlVecY * perpUnitVecY;
+              const direction = dotProduct >= 0 ? 'right' : 'left';
+              
+              // arcSize 계산 (비율로 저장)
+              const arcSize = Math.abs(controlDistance / lineLength);
+              
+              // 호 경로 업데이트
+              const newPathData = `M ${xScale(startPoint.x)} ${yScale(startPoint.y)} 
+                                  Q ${svgX} ${svgY}, 
+                                  ${xScale(endPoint.x)} ${yScale(endPoint.y)}`;
+              
+              // 같은 라인의 호 경로 찾아서 업데이트
+              shapeGroup.selectAll('path.arc-path')
+                .filter(function() {
+                  return d3.select(this).attr('data-line-index') === lineId;
+                })
+                .attr('d', newPathData);
+              
+              // 제어점 위치 업데이트
+              shapeGroup.selectAll('circle')
+                .filter(function() {
+                  return d3.select(this).attr('data-line-index') === lineId;
+                })
+                .attr('cx', svgX)
+                .attr('cy', svgY);
+                
+              // 길이 텍스트 위치 업데이트 - 제어점 위에 표시
+              shapeGroup.selectAll('text')
+                .filter(function() {
+                  const textLineId = d3.select(this).attr('data-line-id');
+                  return textLineId === lineId && d3.select(this).classed('arc-length');
+                })
+                .attr('x', svgX)
+                .attr('y', svgY - 10);
+              
+              // 라인 데이터 업데이트
+              const lineIndex = actualData.lines.findIndex(l => 
+                l.start === startLabel && l.end === endLabel
+              );
+              
+              if (lineIndex !== -1) {
+                // 비동기적으로 데이터 업데이트하여 렌더링 성능 향상
+                setTimeout(() => {
+                  handleLineChange(lineIndex, 'arcSize', arcSize);
+                  handleLineChange(lineIndex, 'arcDirection', direction);
+                }, 50);
+              }
+            })
+            .on('end', function() {
+              d3.select(this).attr('stroke', '#adb5bd');
+            })
+          );
+
+          // 길이 값에 클래스 추가하여 식별 가능하게
+          arcText.attr('class', 'arc-length')
+                 .attr('data-line-id', line.start + '-' + line.end);
         }
       }
     });
@@ -1737,6 +1898,54 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
     }
   }, []);
 
+  // 라인 ID로 라인 객체 찾기
+  const getLineById = (id: string) => {
+    const [start, end] = id.split('-');
+    return actualData.lines.find(line => line.start === start && line.end === end);
+  };
+
+  // 호 크기 변경 핸들러
+  const handleLineArcSizeChange = (id: string, size: number) => {
+    if (!onDataChange) return;
+    
+    const [start, end] = id.split('-');
+    const lineIndex = actualData.lines.findIndex(line => line.start === start && line.end === end);
+    
+    if (lineIndex >= 0) {
+      const newLines = [...actualData.lines];
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        arcSize: size
+      };
+      
+      onDataChange({
+        ...actualData,
+        lines: newLines
+      });
+    }
+  };
+
+  // 호 방향 변경 핸들러
+  const handleLineArcDirectionChange = (id: string, direction: 'left' | 'right') => {
+    if (!onDataChange) return;
+    
+    const [start, end] = id.split('-');
+    const lineIndex = actualData.lines.findIndex(line => line.start === start && line.end === end);
+    
+    if (lineIndex >= 0) {
+      const newLines = [...actualData.lines];
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        arcDirection: direction
+      };
+      
+      onDataChange({
+        ...actualData,
+        lines: newLines
+      });
+    }
+  };
+
   return (
     <div className="flex flex-col md:flex-row items-start gap-4 w-full">
       <div className="w-full md:w-1/2 border rounded-lg flex flex-col">
@@ -1942,7 +2151,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                   <div className="flex items-center">
                     <input
                       type="checkbox"
-                      checked={line.showLengthArc || false}
+                      checked={line.showLengthArc || true}
                       onChange={(e) => handleLineChange(idx, 'showLengthArc', e.target.checked)}
                       className="mr-1"
                     />
@@ -1958,6 +2167,34 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                 <div className="text-xs text-gray-500 mt-1">
                   {formatLine(line)}
                 </div>
+                {/* 호 표시가 활성화된 경우 추가 옵션 표시 */}
+                {line.showLengthArc && (
+                  <div className="grid grid-cols-2 gap-2 items-center mt-1">
+                    <div className="flex items-center">
+                      <span className="text-xs mr-2">크기:</span>
+                      <input
+                        type="number"
+                        value={line.arcSize || 0.2}
+                        onChange={(e) => handleLineChange(idx, 'arcSize', e.target.value)}
+                        step="0.05"
+                        min="0.05"
+                        max="1"
+                        className="w-full p-1 border rounded"
+                      />
+                    </div>
+                    <div className="flex items-center">
+                      <span className="text-xs mr-2">방향:</span>
+                      <select
+                        value={line.arcDirection || 'right'}
+                        onChange={(e) => handleLineChange(idx, 'arcDirection', e.target.value)}
+                        className="w-full p-1 border rounded"
+                      >
+                        <option value="right">오른쪽</option>
+                        <option value="left">왼쪽</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
