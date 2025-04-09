@@ -12,6 +12,7 @@ interface Line {
   start: string;
   end: string;
   length?: number;
+  lengthLabel?: string; // 사용자가 지정한 길이 레이블 (예: "x", "2a" 등)
   isMeasurement?: boolean;
   showLength?: boolean;
   showLengthArc?: boolean;
@@ -147,11 +148,9 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
   };
 
   const formatLine = (line: Line) => {
-    let text = `${line.start}${line.end}: ${line.length ? formatNumber(line.length) : '길이 미표시'}`;
-    if (line.showLengthArc) {
-      text += ' (호 표시)';
-    }
-    return text;
+    // lengthLabel이 있으면 해당 텍스트를 사용, 없으면 수치 값 사용
+    const lengthText = line.lengthLabel || (line.length ? `${line.length.toFixed(2)}` : '');
+    return `${line.start}-${line.end}: ${lengthText}`;
   };
 
   const formatAngle = (angle: Angle) => {
@@ -222,6 +221,11 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           length
         };
       }
+    } else if (property === 'lengthLabel') {
+      newLines[lineIndex] = {
+        ...newLines[lineIndex],
+        lengthLabel: value
+      };
     }
     
     onDataChange({
@@ -311,7 +315,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
       showLengthArc: true,
       arcSize: 0.2,
       arcDirection: 'right',
-      length: distance > 0 ? distance : 5 // 실제 거리가 있으면 그 값을, 없으면 기본값 5 사용
+      length: distance > 0 ? distance : 5, // 실제 거리가 있으면 그 값을, 없으면 기본값 5 사용
+      lengthLabel: '' // 기본값으로 빈 레이블
     };
     
     onDataChange({
@@ -1136,8 +1141,8 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
           .attr('stroke', '#212529')
           .attr('stroke-width', 1.5);
 
-        // 길이 표시
-        if (line.showLength && line.length) {
+        // 길이 표시 (직선)
+        if (line.showLength && (line.length || line.lengthLabel)) {
           const midX = (startPoint.x + endPoint.x) / 2;
           const midY = (startPoint.y + endPoint.y) / 2;
           
@@ -1145,13 +1150,14 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             shapeGroup, 
             midX, 
             midY - 0.3,
-            formatNumber(line.length),
+            line.lengthLabel || formatNumber(line.length!),
             { fontSize: '13px', fontWeight: 'bold' }
           );
         }
         
+        // 길이를 호로 표시 부분도 수정
         // 길이를 호로 표시
-        if (line.showLengthArc && line.length) {
+        if (line.showLengthArc && (line.length || line.lengthLabel)) {
           // 두 점 사이의 거리 계산
           const dx = endPoint.x - startPoint.x;
           const dy = endPoint.y - startPoint.y;
@@ -1202,7 +1208,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
             shapeGroup, 
             controlX, 
             controlY - 0.2,
-            formatNumber(line.length), 
+            line.lengthLabel || formatNumber(line.length!),
             { fill: '#495057', fontSize: '13px', fontWeight: 'bold' }
           );
           
@@ -2158,7 +2164,7 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                   <div className="flex items-center">
                     <input
                       type="checkbox"
-                      checked={line.showLength || false}
+                      checked={Boolean(line.showLength)}
                       onChange={(e) => handleLineChange(idx, 'showLength', e.target.checked)}
                       className="mr-1"
                     />
@@ -2179,6 +2185,18 @@ const GeometryRenderer = ({ data, onDataChange }: Props) => {
                   >
                     ×
                   </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2 items-center mt-1">
+                  <div className="flex items-center">
+                    <span className="text-xs mr-2">길이 레이블:</span>
+                    <input
+                      type="text"
+                      value={line.lengthLabel || ''}
+                      onChange={(e) => handleLineChange(idx, 'lengthLabel', e.target.value)}
+                      className="w-full p-1 border rounded"
+                      placeholder="x, 2a 등"
+                    />
+                  </div>
                 </div>
                 <div className="text-xs text-gray-500 mt-1">
                   {formatLine(line)}
